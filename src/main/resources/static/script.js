@@ -2,6 +2,15 @@ const API_URL = '/api/tasks';
 let currentEditId = null;
 let currentDeleteId = null;
 let allTasks = [];
+let currentSlices = [];
+
+// Load stored slices on boot
+try {
+    const savedSlices = localStorage.getItem('daily_time_slices');
+    if (savedSlices) currentSlices = JSON.parse(savedSlices);
+} catch (e) {
+    console.error('Failed to load slices:', e);
+}
 
 // --- FETCH & TASK MANAGEMENT ---
 
@@ -19,10 +28,13 @@ async function addTask(event) {
     event.preventDefault();
     const titleInput = document.getElementById('taskTitle');
     const priorityInput = document.getElementById('taskPriority');
+    const sliceSelect = document.getElementById('taskSlice');
+
+    const selectedSlice = sliceSelect ? sliceSelect.value : '';
 
     const newTask = {
         title: titleInput.value,
-        description: "",
+        description: selectedSlice ? `[slice:${selectedSlice}]` : "",
         priority: parseInt(priorityInput.value)
     };
 
@@ -68,14 +80,30 @@ async function submitDelete() {
     }
 }
 
+function getTaskSlice(task) {
+    if (!task || !task.description) return '';
+    const match = task.description.match(/\[slice:(.*?)\]/);
+    return match ? match[1] : '';
+}
+
+function cleanDescription(description) {
+    if (!description) return '';
+    return description.replace(/\[slice:(.*?)\]/g, '').trim();
+}
+
 function editTask(id) {
     currentEditId = id;
     const task = allTasks.find(t => t.id === id);
 
     document.getElementById('editTaskInput').value = task.title;
-    document.getElementById('editTaskDescription').value = task.description || '';
-    document.getElementById('editModal').classList.remove('hidden');
+    document.getElementById('editTaskDescription').value = cleanDescription(task.description);
 
+    const sliceSelect = document.getElementById('editTaskSlice');
+    if (sliceSelect) {
+        sliceSelect.value = getTaskSlice(task);
+    }
+
+    document.getElementById('editModal').classList.remove('hidden');
     updatePreview();
 }
 
@@ -86,10 +114,14 @@ function closeEditModal() {
 
 async function submitEdit() {
     const newTitle = document.getElementById('editTaskInput').value;
-    const newDesc = document.getElementById('editTaskDescription').value;
+    const rawDesc = document.getElementById('editTaskDescription').value;
+    const sliceSelect = document.getElementById('editTaskSlice');
+    const selectedSlice = sliceSelect ? sliceSelect.value : '';
+
     if (currentEditId === null || !newTitle || newTitle.trim() === '') return;
 
     const existingTask = allTasks.find(t => t.id === currentEditId) || {};
+    const finalDesc = selectedSlice ? `[slice:${selectedSlice}]\n${rawDesc}` : rawDesc;
 
     try {
         const response = await fetch(`${API_URL}/${currentEditId}`, {
@@ -98,18 +130,17 @@ async function submitEdit() {
             body: JSON.stringify({
                 ...existingTask,
                 title: newTitle.trim(),
-                description: newDesc
+                description: finalDesc
             })
         });
-        if (!response.ok) {
-            throw new Error(`Save failed with HTTP status ${response.status}`);
-        }
+
+        if (!response.ok) throw new Error(`Save failed with HTTP ${response.status}`);
 
         closeEditModal();
         await fetchTasks();
     } catch (error) {
         console.error('Error editing task:', error);
-        window.alert('Task could not be saved. Your notes are still in the editor; please try again.');
+        window.alert('Task could not be saved. Please try again.');
     }
 }
 
@@ -156,27 +187,6 @@ async function toggleSubtask(targetIndex) {
     });
 
     updatePreview();
-
-    if (currentEditId) {
-        const newTitle = document.getElementById('editTaskInput').value;
-        const newDesc = textarea.value;
-        const existingTask = allTasks.find(t => t.id === currentEditId) || {};
-
-        try {
-            await fetch(`${API_URL}/${currentEditId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...existingTask,
-                    title: newTitle.trim(),
-                    description: newDesc
-                })
-            });
-            fetchTasks();
-        } catch (error) {
-            console.error('Error auto-saving subtask toggle:', error);
-        }
-    }
 }
 
 async function toggleRollover(id) {
@@ -188,69 +198,36 @@ async function toggleRollover(id) {
     }
 }
 
-function renderTasks(tasks) {
-    const taskList = document.getElementById('taskList');
-    const completedTaskList = document.getElementById('completedTaskList');
-    const completedSection = document.getElementById('completedSection');
+// --- DYNAMIC SLICES & SCHEDULE GENERATOR ---
 
-    if (!taskList) return;
-
-    taskList.innerHTML = '';
-    if (completedTaskList) completedTaskList.innerHTML = '';
-
-    const activeTasks = tasks.filter(task => !task.completed);
-    const completedTasks = tasks.filter(task => task.completed);
-
-    if (completedSection) {
-        if (completedTasks.length === 0) {
-            completedSection.classList.add('hidden');
-        } else {
-            completedSection.classList.remove('hidden');
-        }
-    }
-
-    const buildTaskHTML = (task) => {
-        const li = document.createElement('li');
-        li.className = `task-item ${task.completed ? 'completed' : ''} ${task.rollover ? 'is-rollover' : ''}`;
-
-        const subtaskStats = getSubtaskStats(task.description);
-        let subtaskBadgeHTML = '';
-        if (subtaskStats) {
-            const isAllDone = subtaskStats.completed === subtaskStats.total;
-            subtaskBadgeHTML = `
-                <span class="subtask-badge ${isAllDone ? 'all-done' : ''}">
-                    ✓ ${subtaskStats.completed}/${subtaskStats.total}
-                </span>
-            `;
-        }
-
-        li.innerHTML = `
-            <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} 
-                   onchange="completeTask(${task.id})">
-            <span class="task-title">${task.title}</span>
-            ${subtaskBadgeHTML}
-            <span class="priority-badge prio-${task.priority}">
-                ${task.priority === 3 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
-            </span>
-            
-            <div class="task-actions">
-                <button class="icon-btn rollover-btn ${task.rollover ? 'active' : ''}" 
-                        onclick="toggleRollover(${task.id})" 
-                        title="Rollover to tomorrow">➔</button>
-                <button class="icon-btn edit-btn" onclick="editTask(${task.id})">✎</button>
-                <button class="icon-btn delete-btn" onclick="deleteTask(${task.id})">✖</button>
-            </div>
-        `;
-        return li;
-    };
-
-    activeTasks.forEach(task => taskList.appendChild(buildTaskHTML(task)));
-    if (completedTaskList) {
-        completedTasks.forEach(task => completedTaskList.appendChild(buildTaskHTML(task)));
-    }
+function openScheduleModal() {
+    const modal = document.getElementById('scheduleModal');
+    if (modal) modal.classList.remove('hidden');
 }
 
-// --- DYNAMIC TIME-SLICE & SCHEDULE GENERATOR ---
+function closeScheduleModal() {
+    const modal = document.getElementById('scheduleModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function updateSliceDropdowns() {
+    const taskSliceSelect = document.getElementById('taskSlice');
+    const editTaskSliceSelect = document.getElementById('editTaskSlice');
+
+    const activeSlicesOnly = currentSlices.filter(s => !s.isBlocked);
+
+    let optionsHTML = '<option value="">No Slice (Unassigned)</option>';
+    activeSlicesOnly.forEach(slice => {
+        optionsHTML += `<option value="${slice.id}">${slice.label}</option>`;
+    });
+
+    if (taskSliceSelect) taskSliceSelect.innerHTML = optionsHTML;
+    if (editTaskSliceSelect) editTaskSliceSelect.innerHTML = optionsHTML;
+}
+
+function formatTime(date) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
 function generateSchedule() {
     const wakeVal = document.getElementById('startTime').value;
@@ -290,60 +267,38 @@ function generateSchedule() {
 
     blockedWindows.sort((a, b) => a.start - b.start);
 
-    let freeIntervals = [];
+    let intervals = [];
     let currentTime = new Date(wakeTime);
+    let sliceNum = 1;
 
     blockedWindows.forEach(block => {
         if (currentTime < block.start) {
-            freeIntervals.push({ start: new Date(currentTime), end: new Date(block.start), isBlocked: false });
+            const id = `slice_${sliceNum++}`;
+            const label = `Slice ${sliceNum - 1}: ${formatTime(currentTime)} - ${formatTime(block.start)}`;
+            intervals.push({ id, label, start: new Date(currentTime), end: new Date(block.start), isBlocked: false });
         }
-        freeIntervals.push(block);
+        intervals.push({
+            id: `blocked_${Date.now()}_${Math.random()}`,
+            label: `🚫 ${block.label} (${formatTime(block.start)} - ${formatTime(block.end)})`,
+            start: block.start,
+            end: block.end,
+            isBlocked: true
+        });
         currentTime = new Date(Math.max(currentTime, block.end));
     });
 
     if (currentTime < sleepTime) {
-        freeIntervals.push({ start: new Date(currentTime), end: new Date(sleepTime), isBlocked: false });
+        const id = `slice_${sliceNum++}`;
+        const label = `Slice ${sliceNum - 1}: ${formatTime(currentTime)} - ${formatTime(sleepTime)}`;
+        intervals.push({ id, label, start: new Date(currentTime), end: new Date(sleepTime), isBlocked: false });
     }
 
-    renderTimeSections(freeIntervals);
-}
+    currentSlices = intervals;
+    localStorage.setItem('daily_time_slices', JSON.stringify(currentSlices));
 
-function formatTime(date) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function renderTimeSections(intervals) {
-    const container = document.getElementById('tasksContainer') || document.getElementById('taskList');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    let sliceIndex = 1;
-
-    intervals.forEach(interval => {
-        const section = document.createElement('div');
-        section.className = interval.isBlocked ? 'time-section blocked' : 'time-section active';
-
-        const header = document.createElement('h3');
-        if (interval.isBlocked) {
-            header.innerText = `🚫 ${interval.label} (${formatTime(interval.start)} - ${formatTime(interval.end)})`;
-            section.appendChild(header);
-            section.innerHTML += `<p class="blocked-text">Tasks cannot be assigned during this period.</p>`;
-        } else {
-            const sliceId = `SLICE_${sliceIndex}`;
-            header.innerText = `Slice ${sliceIndex}: ${formatTime(interval.start)} - ${formatTime(interval.end)}`;
-            section.appendChild(header);
-            section.innerHTML += `<div class="slice-task-list" data-slice="${sliceId}"></div>`;
-            sliceIndex++;
-        }
-
-        container.appendChild(section);
-    });
-
-    const modal = document.getElementById('scheduleModal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
+    updateSliceDropdowns();
+    closeScheduleModal();
+    renderTasks(allTasks);
 }
 
 function addBlockedRow() {
@@ -361,14 +316,127 @@ function addBlockedRow() {
     container.appendChild(row);
 }
 
-function openScheduleModal() {
-    const modal = document.getElementById('scheduleModal');
-    if (modal) modal.classList.remove('hidden');
-}
+// --- RENDER TASKS GROUPED BY SLICES ---
 
-function closeScheduleModal() {
-    const modal = document.getElementById('scheduleModal');
-    if (modal) modal.classList.add('hidden');
+function renderTasks(tasks) {
+    const container = document.getElementById('scheduleSlicesContainer');
+    const fallbackList = document.getElementById('taskList');
+    const completedTaskList = document.getElementById('completedTaskList');
+    const completedSection = document.getElementById('completedSection');
+
+    if (!container) return;
+
+    container.innerHTML = '';
+    if (fallbackList) fallbackList.innerHTML = '';
+    if (completedTaskList) completedTaskList.innerHTML = '';
+
+    const activeTasks = tasks.filter(task => !task.completed);
+    const completedTasks = tasks.filter(task => task.completed);
+
+    if (completedSection) {
+        completedSection.classList.toggle('hidden', completedTasks.length === 0);
+    }
+
+    const buildTaskHTML = (task) => {
+        const li = document.createElement('li');
+        li.className = `task-item ${task.completed ? 'completed' : ''} ${task.rollover ? 'is-rollover' : ''}`;
+
+        const cleanDesc = cleanDescription(task.description);
+        const subtaskStats = getSubtaskStats(cleanDesc);
+        let subtaskBadgeHTML = '';
+        if (subtaskStats) {
+            const isAllDone = subtaskStats.completed === subtaskStats.total;
+            subtaskBadgeHTML = `
+                <span class="subtask-badge ${isAllDone ? 'all-done' : ''}">
+                    ✓ ${subtaskStats.completed}/${subtaskStats.total}
+                </span>
+            `;
+        }
+
+        li.innerHTML = `
+            <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} 
+                   onchange="completeTask(${task.id})">
+            <span class="task-title">${task.title}</span>
+            ${subtaskBadgeHTML}
+            <span class="priority-badge prio-${task.priority}">
+                ${task.priority === 3 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
+            </span>
+            
+            <div class="task-actions">
+                <button class="icon-btn rollover-btn ${task.rollover ? 'active' : ''}" 
+                        onclick="toggleRollover(${task.id})" 
+                        title="Rollover to tomorrow">➔</button>
+                <button class="icon-btn edit-btn" onclick="editTask(${task.id})">✎</button>
+                <button class="icon-btn delete-btn" onclick="deleteTask(${task.id})">✖</button>
+            </div>
+        `;
+        return li;
+    };
+
+    const tasksBySlice = {};
+    const unassignedTasks = [];
+
+    activeTasks.forEach(task => {
+        const sliceId = getTaskSlice(task);
+        if (sliceId) {
+            if (!tasksBySlice[sliceId]) tasksBySlice[sliceId] = [];
+            tasksBySlice[sliceId].push(task);
+        } else {
+            unassignedTasks.push(task);
+        }
+    });
+
+    if (currentSlices.length > 0) {
+        currentSlices.forEach(slice => {
+            const section = document.createElement('div');
+            section.className = slice.isBlocked ? 'time-section blocked' : 'time-section active';
+            section.style.marginBottom = '1.5rem';
+
+            const header = document.createElement('h3');
+            header.style.marginBottom = '0.5rem';
+            header.innerText = slice.label;
+            section.appendChild(header);
+
+            if (slice.isBlocked) {
+                const blockedNote = document.createElement('p');
+                blockedNote.className = 'blocked-text';
+                blockedNote.style.opacity = '0.7';
+                blockedNote.innerText = 'Tasks cannot be assigned during this period.';
+                section.appendChild(blockedNote);
+            } else {
+                const ul = document.createElement('ul');
+                ul.className = 'task-list';
+
+                const sliceTasks = tasksBySlice[slice.id] || [];
+                sliceTasks.forEach(task => ul.appendChild(buildTaskHTML(task)));
+
+                section.appendChild(ul);
+            }
+
+            container.appendChild(section);
+        });
+    }
+
+    if (unassignedTasks.length > 0) {
+        const unassignedSection = document.createElement('div');
+        unassignedSection.className = 'time-section unassigned';
+        unassignedSection.style.marginBottom = '1.5rem';
+
+        const header = document.createElement('h3');
+        header.innerText = 'Unassigned Tasks';
+        unassignedSection.appendChild(header);
+
+        const ul = document.createElement('ul');
+        ul.className = 'task-list';
+        unassignedTasks.forEach(task => ul.appendChild(buildTaskHTML(task)));
+        unassignedSection.appendChild(ul);
+
+        container.appendChild(unassignedSection);
+    }
+
+    if (completedTaskList) {
+        completedTasks.forEach(task => completedTaskList.appendChild(buildTaskHTML(task)));
+    }
 }
 
 // --- UTILITY & INIT ---
@@ -390,25 +458,22 @@ function insertMarkdown(syntax) {
     updatePreview();
 }
 
-// Event Listeners for Schedule Modal Buttons
 document.addEventListener('DOMContentLoaded', () => {
     const generateBtn = document.getElementById('generateSlicesBtn');
-    if (generateBtn) {
-        generateBtn.addEventListener('click', generateSchedule);
-    }
+    if (generateBtn) generateBtn.addEventListener('click', generateSchedule);
 
     const addBlockBtn = document.getElementById('addBlockBtn');
-    if (addBlockBtn) {
-        addBlockBtn.addEventListener('click', addBlockedRow);
-    }
+    if (addBlockBtn) addBlockBtn.addEventListener('click', addBlockedRow);
+
+    updateSliceDropdowns();
 });
 
-// Register Service Worker for PWA support
+// Register Service Worker
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('PWA Service Worker registered:', reg.scope))
-            .catch(err => console.error('Service Worker registration failed:', err));
+            .then(reg => console.log('Service Worker registered:', reg.scope))
+            .catch(err => console.error('Service Worker failed:', err));
     });
 }
 
