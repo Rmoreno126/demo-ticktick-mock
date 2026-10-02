@@ -42,6 +42,25 @@ function getWeeklySchedule() {
     }
 }
 
+// --- CUSTOM TOAST NOTIFICATION (Replaces alert popup) ---
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toastMessage');
+    if (!toast || !toastMsg) return;
+
+    toastMsg.innerText = message;
+    toast.classList.remove('hidden');
+
+    // Trigger CSS transition
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.classList.add('hidden'), 300);
+    }, 2500);
+}
+
 // --- TAB SWITCHER ---
 
 function switchTab(tabName) {
@@ -223,7 +242,7 @@ function saveWeeklySchedule() {
     schedule.days[selectedDay] = updatedBlocks;
     localStorage.setItem('weekly_recurring_schedule', JSON.stringify(schedule));
 
-    alert(`Schedule for ${selectedDay} saved!`);
+    showToast(`✓ Schedule for ${selectedDay} saved!`);
 }
 
 // --- FETCH & TASK MANAGEMENT ---

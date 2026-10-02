@@ -21,8 +21,12 @@
 <div class="app-container">
     <!-- Top Navigation Tabs -->
     <nav class="nav-tabs">
-        <button id="tabTasksBtn" class="tab-btn active" onclick="switchTab('tasks')">📋 Daily Tasks</button>
-        <button id="tabSettingsBtn" class="tab-btn" onclick="switchTab('settings')">⚙️ Weekly Schedule</button>
+        <button id="tabTasksBtn" class="tab-btn active" onclick="switchTab('tasks')">
+            <span class="tab-icon">📋</span> Daily Tasks
+        </button>
+        <button id="tabSettingsBtn" class="tab-btn" onclick="switchTab('settings')">
+            <span class="tab-icon blue-icon">⚙️</span> Weekly Schedule
+        </button>
     </nav>
 
     <!-- TAB 1: DAILY TASKS VIEW -->
@@ -32,7 +36,7 @@
             <span id="currentDayBadge" class="day-badge">Today</span>
         </div>
 
-        <!-- Task Creation Form (Responsive Wrapped Layout) -->
+        <!-- Task Creation Form -->
         <form class="task-form" onsubmit="addTask(event)">
             <input type="text" id="taskTitle" placeholder="What needs to be done?" required class="task-input">
 
@@ -52,9 +56,7 @@
         </form>
 
         <!-- Dynamic Time Slices Container -->
-        <div id="scheduleSlicesContainer" class="slices-wrapper">
-            <!-- Slice cards and nested tasks injected here -->
-        </div>
+        <div id="scheduleSlicesContainer" class="slices-wrapper"></div>
 
         <!-- Completed Tasks Section -->
         <div id="completedSection" class="completed-card hidden">
@@ -68,7 +70,7 @@
         <div class="header-row">
             <h2>Weekly Recurring Schedule</h2>
         </div>
-        <p class="settings-subtitle">Set your regular class and work blocks. Your slices will auto-generate for whatever day of the week it is!</p>
+        <p class="settings-subtitle">Set your regular class and work blocks. Slices auto-generate based on the day of the week!</p>
 
         <div class="settings-card">
             <div class="global-times-group">
@@ -108,6 +110,11 @@
             </div>
         </div>
     </main>
+</div>
+
+<!-- Floating Toast Notification (Replaces Browser Alert) -->
+<div id="toast" class="toast-notification hidden">
+    <span id="toastMessage"></span>
 </div>
 
 <!-- Custom Edit Modal -->
