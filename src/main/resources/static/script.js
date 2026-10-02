@@ -2,14 +2,228 @@ const API_URL = '/api/tasks';
 let currentEditId = null;
 let currentDeleteId = null;
 let allTasks = [];
-let currentSlices = [];
+let todaySlices = [];
 
-// Load stored slices on boot
-try {
-    const savedSlices = localStorage.getItem('daily_time_slices');
-    if (savedSlices) currentSlices = JSON.parse(savedSlices);
-} catch (e) {
-    console.error('Failed to load slices:', e);
+// Default Weekly Recurring Schedule Structure
+const DEFAULT_WEEKLY_SCHEDULE = {
+    wakeTime: "08:00",
+    sleepTime: "22:00",
+    days: {
+        Monday: [
+            { label: "Class", start: "10:00", end: "13:00" },
+            { label: "Class", start: "16:00", end: "17:00" }
+        ],
+        Tuesday: [
+            { label: "Class", start: "11:00", end: "12:30" },
+            { label: "Class", start: "13:00", end: "14:30" },
+            { label: "Class", start: "15:00", end: "17:00" }
+        ],
+        Wednesday: [
+            { label: "Class", start: "10:00", end: "13:00" }
+        ],
+        Thursday: [
+            { label: "Class", start: "11:00", end: "12:30" },
+            { label: "Work", start: "14:00", end: "18:00" }
+        ],
+        Friday: [
+            { label: "Work", start: "09:00", end: "13:00" }
+        ],
+        Saturday: [],
+        Sunday: []
+    }
+};
+
+function getWeeklySchedule() {
+    try {
+        const saved = localStorage.getItem('weekly_recurring_schedule');
+        return saved ? JSON.parse(saved) : DEFAULT_WEEKLY_SCHEDULE;
+    } catch (e) {
+        return DEFAULT_WEEKLY_SCHEDULE;
+    }
+}
+
+// --- TAB SWITCHER ---
+
+function switchTab(tabName) {
+    const tasksView = document.getElementById('tasksView');
+    const settingsView = document.getElementById('settingsView');
+    const tabTasksBtn = document.getElementById('tabTasksBtn');
+    const tabSettingsBtn = document.getElementById('tabSettingsBtn');
+
+    if (tabName === 'tasks') {
+        tasksView.classList.remove('hidden');
+        tasksView.classList.add('active');
+        settingsView.classList.add('hidden');
+        settingsView.classList.remove('active');
+
+        tabTasksBtn.classList.add('active');
+        tabSettingsBtn.classList.remove('active');
+
+        computeTodaySlices();
+        renderTasks(allTasks);
+    } else {
+        settingsView.classList.remove('hidden');
+        settingsView.classList.add('active');
+        tasksView.classList.add('hidden');
+        tasksView.classList.remove('active');
+
+        tabSettingsBtn.classList.add('active');
+        tabTasksBtn.classList.remove('active');
+
+        loadWeeklyScheduleIntoSettings();
+    }
+}
+
+// --- DYNAMIC DAY & SLICE CALCULATION ---
+
+function getCurrentDayName() {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[new Date().getDay()];
+}
+
+function formatTimeStr(date) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function computeTodaySlices() {
+    const dayName = getCurrentDayName();
+    const dayBadge = document.getElementById('currentDayBadge');
+    if (dayBadge) dayBadge.innerText = `${dayName}`;
+
+    const schedule = getWeeklySchedule();
+    const wakeVal = schedule.wakeTime || "08:00";
+    const sleepVal = schedule.sleepTime || "22:00";
+    const dayBlocks = schedule.days[dayName] || [];
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const baseDate = `${todayStr}T`;
+
+    let wakeTime = new Date(`${baseDate}${wakeVal}:00`);
+    let sleepTime = new Date(`${baseDate}${sleepVal}:00`);
+    if (sleepTime <= wakeTime) sleepTime.setDate(sleepTime.getDate() + 1);
+
+    const parsedBlocks = dayBlocks.map(b => {
+        let bStart = new Date(`${baseDate}${b.start}:00`);
+        let bEnd = new Date(`${baseDate}${b.end}:00`);
+        if (bStart < wakeTime) bStart.setDate(bStart.getDate() + 1);
+        if (bEnd <= bStart) bEnd.setDate(bEnd.getDate() + 1);
+        return { label: b.label || 'Blocked', start: bStart, end: bEnd, isBlocked: true };
+    }).sort((a, b) => a.start - b.start);
+
+    let intervals = [];
+    let currentTime = new Date(wakeTime);
+    let sliceNum = 1;
+
+    parsedBlocks.forEach(block => {
+        if (currentTime < block.start) {
+            const id = `slice_${sliceNum++}`;
+            const label = `Slice ${sliceNum - 1}: ${formatTimeStr(currentTime)} - ${formatTimeStr(block.start)}`;
+            intervals.push({ id, label, start: new Date(currentTime), end: new Date(block.start), isBlocked: false });
+        }
+        intervals.push({
+            id: `blocked_${Date.now()}_${Math.random()}`,
+            label: `🚫 ${block.label} (${formatTimeStr(block.start)} - ${formatTimeStr(block.end)})`,
+            start: block.start,
+            end: block.end,
+            isBlocked: true
+        });
+        currentTime = new Date(Math.max(currentTime, block.end));
+    });
+
+    if (currentTime < sleepTime) {
+        const id = `slice_${sliceNum++}`;
+        const label = `Slice ${sliceNum - 1}: ${formatTimeStr(currentTime)} - ${formatTimeStr(sleepTime)}`;
+        intervals.push({ id, label, start: new Date(currentTime), end: new Date(sleepTime), isBlocked: false });
+    }
+
+    todaySlices = intervals;
+    updateSliceDropdowns();
+}
+
+function updateSliceDropdowns() {
+    const taskSliceSelect = document.getElementById('taskSlice');
+    const editTaskSliceSelect = document.getElementById('editTaskSlice');
+
+    const activeSlices = todaySlices.filter(s => !s.isBlocked);
+    let optionsHTML = '<option value="">No Slice (Unassigned)</option>';
+
+    activeSlices.forEach(s => {
+        optionsHTML += `<option value="${s.id}">${s.label}</option>`;
+    });
+
+    if (taskSliceSelect) taskSliceSelect.innerHTML = optionsHTML;
+    if (editTaskSliceSelect) editTaskSliceSelect.innerHTML = optionsHTML;
+}
+
+// --- SETTINGS VIEW MANAGEMENT ---
+
+function loadWeeklyScheduleIntoSettings() {
+    const schedule = getWeeklySchedule();
+    document.getElementById('globalWakeTime').value = schedule.wakeTime || "08:00";
+    document.getElementById('globalSleepTime').value = schedule.sleepTime || "22:00";
+
+    const daySelect = document.getElementById('settingsDaySelect');
+    if (daySelect && !daySelect.value) {
+        daySelect.value = getCurrentDayName();
+    }
+    loadDayScheduleInSettings();
+}
+
+function loadDayScheduleInSettings() {
+    const selectedDay = document.getElementById('settingsDaySelect').value;
+    const schedule = getWeeklySchedule();
+    const dayBlocks = (schedule.days && schedule.days[selectedDay]) ? schedule.days[selectedDay] : [];
+
+    const container = document.getElementById('settingsBlockedContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    dayBlocks.forEach(b => {
+        addSettingsBlockedRow(b.label, b.start, b.end);
+    });
+}
+
+function addSettingsBlockedRow(label = '', start = '10:00', end = '12:00') {
+    const container = document.getElementById('settingsBlockedContainer');
+    if (!container) return;
+
+    const row = document.createElement('div');
+    row.className = 'blocked-row';
+    row.innerHTML = `
+        <input type="text" placeholder="Activity (e.g. Class)" class="block-label" value="${label}">
+        <input type="time" class="block-start" value="${start}">
+        <span>to</span>
+        <input type="time" class="block-end" value="${end}">
+        <button type="button" onclick="this.parentElement.remove()" class="icon-btn">✖</button>
+    `;
+    container.appendChild(row);
+}
+
+function saveWeeklySchedule() {
+    const wakeTime = document.getElementById('globalWakeTime').value;
+    const sleepTime = document.getElementById('globalSleepTime').value;
+    const selectedDay = document.getElementById('settingsDaySelect').value;
+
+    const schedule = getWeeklySchedule();
+    schedule.wakeTime = wakeTime;
+    schedule.sleepTime = sleepTime;
+
+    const rows = document.querySelectorAll('#settingsBlockedContainer .blocked-row');
+    const updatedBlocks = [];
+
+    rows.forEach(row => {
+        const label = row.querySelector('.block-label').value;
+        const start = row.querySelector('.block-start').value;
+        const end = row.querySelector('.block-end').value;
+        if (start && end) {
+            updatedBlocks.push({ label: label || 'Class', start, end });
+        }
+    });
+
+    schedule.days[selectedDay] = updatedBlocks;
+    localStorage.setItem('weekly_recurring_schedule', JSON.stringify(schedule));
+
+    alert(`Schedule for ${selectedDay} saved!`);
 }
 
 // --- FETCH & TASK MANAGEMENT ---
@@ -140,7 +354,6 @@ async function submitEdit() {
         await fetchTasks();
     } catch (error) {
         console.error('Error editing task:', error);
-        window.alert('Task could not be saved. Please try again.');
     }
 }
 
@@ -164,29 +377,10 @@ function updatePreview() {
     let cbIndex = 0;
     let processedText = rawText.replace(SUBTASK_REGEX, (match, group1) => {
         const isChecked = group1.toLowerCase() === 'x';
-        const html = `<input type="checkbox" class="subtask-cb" ${isChecked ? 'checked' : ''} onclick="toggleSubtask(${cbIndex})">`;
-        cbIndex++;
-        return html;
+        return `<input type="checkbox" class="subtask-cb" ${isChecked ? 'checked' : ''} onclick="toggleSubtask(${cbIndex++})">`;
     });
 
     document.getElementById('editTaskPreview').innerHTML = marked.parse(processedText);
-}
-
-async function toggleSubtask(targetIndex) {
-    const textarea = document.getElementById('editTaskDescription');
-    let text = textarea.value;
-
-    let currentIndex = 0;
-    textarea.value = text.replace(SUBTASK_REGEX, (match, group1) => {
-        if (currentIndex === targetIndex) {
-            currentIndex++;
-            return group1.toLowerCase() === 'x' ? '[ ]' : '[x]';
-        }
-        currentIndex++;
-        return match;
-    });
-
-    updatePreview();
 }
 
 async function toggleRollover(id) {
@@ -198,136 +392,16 @@ async function toggleRollover(id) {
     }
 }
 
-// --- DYNAMIC SLICES & SCHEDULE GENERATOR ---
-
-function openScheduleModal() {
-    const modal = document.getElementById('scheduleModal');
-    if (modal) modal.classList.remove('hidden');
-}
-
-function closeScheduleModal() {
-    const modal = document.getElementById('scheduleModal');
-    if (modal) modal.classList.add('hidden');
-}
-
-function updateSliceDropdowns() {
-    const taskSliceSelect = document.getElementById('taskSlice');
-    const editTaskSliceSelect = document.getElementById('editTaskSlice');
-
-    const activeSlicesOnly = currentSlices.filter(s => !s.isBlocked);
-
-    let optionsHTML = '<option value="">No Slice (Unassigned)</option>';
-    activeSlicesOnly.forEach(slice => {
-        optionsHTML += `<option value="${slice.id}">${slice.label}</option>`;
-    });
-
-    if (taskSliceSelect) taskSliceSelect.innerHTML = optionsHTML;
-    if (editTaskSliceSelect) editTaskSliceSelect.innerHTML = optionsHTML;
-}
-
-function formatTime(date) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function generateSchedule() {
-    const wakeVal = document.getElementById('startTime').value;
-    const sleepVal = document.getElementById('endTime').value;
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const baseDate = `${todayStr}T`;
-
-    let wakeTime = new Date(`${baseDate}${wakeVal}:00`);
-    let sleepTime = new Date(`${baseDate}${sleepVal}:00`);
-
-    if (sleepTime <= wakeTime) {
-        sleepTime.setDate(sleepTime.getDate() + 1);
-    }
-
-    const blockedRows = document.querySelectorAll('.blocked-row');
-    const blockedWindows = [];
-
-    blockedRows.forEach(row => {
-        const labelInput = row.querySelector('.block-label');
-        const startInput = row.querySelector('.block-start');
-        const endInput = row.querySelector('.block-end');
-
-        const label = (labelInput && labelInput.value) ? labelInput.value : 'Blocked';
-        const startVal = startInput ? startInput.value : null;
-        const endVal = endInput ? endInput.value : null;
-
-        if (startVal && endVal) {
-            let bStart = new Date(`${baseDate}${startVal}:00`);
-            let bEnd = new Date(`${baseDate}${endVal}:00`);
-            if (bStart < wakeTime) bStart.setDate(bStart.getDate() + 1);
-            if (bEnd <= bStart) bEnd.setDate(bEnd.getDate() + 1);
-
-            blockedWindows.push({ label, start: bStart, end: bEnd, isBlocked: true });
-        }
-    });
-
-    blockedWindows.sort((a, b) => a.start - b.start);
-
-    let intervals = [];
-    let currentTime = new Date(wakeTime);
-    let sliceNum = 1;
-
-    blockedWindows.forEach(block => {
-        if (currentTime < block.start) {
-            const id = `slice_${sliceNum++}`;
-            const label = `Slice ${sliceNum - 1}: ${formatTime(currentTime)} - ${formatTime(block.start)}`;
-            intervals.push({ id, label, start: new Date(currentTime), end: new Date(block.start), isBlocked: false });
-        }
-        intervals.push({
-            id: `blocked_${Date.now()}_${Math.random()}`,
-            label: `🚫 ${block.label} (${formatTime(block.start)} - ${formatTime(block.end)})`,
-            start: block.start,
-            end: block.end,
-            isBlocked: true
-        });
-        currentTime = new Date(Math.max(currentTime, block.end));
-    });
-
-    if (currentTime < sleepTime) {
-        const id = `slice_${sliceNum++}`;
-        const label = `Slice ${sliceNum - 1}: ${formatTime(currentTime)} - ${formatTime(sleepTime)}`;
-        intervals.push({ id, label, start: new Date(currentTime), end: new Date(sleepTime), isBlocked: false });
-    }
-
-    currentSlices = intervals;
-    localStorage.setItem('daily_time_slices', JSON.stringify(currentSlices));
-
-    updateSliceDropdowns();
-    closeScheduleModal();
-    renderTasks(allTasks);
-}
-
-function addBlockedRow() {
-    const container = document.getElementById('blockedWindowsContainer');
-    if (!container) return;
-
-    const row = document.createElement('div');
-    row.className = 'blocked-row';
-    row.innerHTML = `
-        <input type="text" placeholder="Activity (e.g. Class)" class="block-label">
-        <input type="time" class="block-start">
-        <span>to</span>
-        <input type="time" class="block-end">
-    `;
-    container.appendChild(row);
-}
-
-// --- RENDER TASKS GROUPED BY SLICES ---
+// --- RENDER TASKS GROUPED INTO SLICE CARDS ---
 
 function renderTasks(tasks) {
     const container = document.getElementById('scheduleSlicesContainer');
-    const fallbackList = document.getElementById('taskList');
     const completedTaskList = document.getElementById('completedTaskList');
     const completedSection = document.getElementById('completedSection');
 
     if (!container) return;
 
     container.innerHTML = '';
-    if (fallbackList) fallbackList.innerHTML = '';
     if (completedTaskList) completedTaskList.innerHTML = '';
 
     const activeTasks = tasks.filter(task => !task.completed);
@@ -346,26 +420,18 @@ function renderTasks(tasks) {
         let subtaskBadgeHTML = '';
         if (subtaskStats) {
             const isAllDone = subtaskStats.completed === subtaskStats.total;
-            subtaskBadgeHTML = `
-                <span class="subtask-badge ${isAllDone ? 'all-done' : ''}">
-                    ✓ ${subtaskStats.completed}/${subtaskStats.total}
-                </span>
-            `;
+            subtaskBadgeHTML = `<span class="subtask-badge ${isAllDone ? 'all-done' : ''}">✓ ${subtaskStats.completed}/${subtaskStats.total}</span>`;
         }
 
         li.innerHTML = `
-            <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} 
-                   onchange="completeTask(${task.id})">
+            <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} onchange="completeTask(${task.id})">
             <span class="task-title">${task.title}</span>
             ${subtaskBadgeHTML}
             <span class="priority-badge prio-${task.priority}">
                 ${task.priority === 3 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
             </span>
-            
             <div class="task-actions">
-                <button class="icon-btn rollover-btn ${task.rollover ? 'active' : ''}" 
-                        onclick="toggleRollover(${task.id})" 
-                        title="Rollover to tomorrow">➔</button>
+                <button class="icon-btn rollover-btn ${task.rollover ? 'active' : ''}" onclick="toggleRollover(${task.id})" title="Rollover to tomorrow">➔</button>
                 <button class="icon-btn edit-btn" onclick="editTask(${task.id})">✎</button>
                 <button class="icon-btn delete-btn" onclick="deleteTask(${task.id})">✖</button>
             </div>
@@ -386,52 +452,41 @@ function renderTasks(tasks) {
         }
     });
 
-    if (currentSlices.length > 0) {
-        currentSlices.forEach(slice => {
-            const section = document.createElement('div');
-            section.className = slice.isBlocked ? 'time-section blocked' : 'time-section active';
-            section.style.marginBottom = '1.5rem';
+    if (todaySlices.length > 0) {
+        todaySlices.forEach(slice => {
+            const card = document.createElement('div');
+            card.className = slice.isBlocked ? 'slice-card blocked' : 'slice-card';
 
-            const header = document.createElement('h3');
-            header.style.marginBottom = '0.5rem';
-            header.innerText = slice.label;
-            section.appendChild(header);
+            const header = document.createElement('div');
+            header.className = 'slice-header';
+            header.innerHTML = `<span class="slice-title">${slice.label}</span>`;
+            card.appendChild(header);
 
             if (slice.isBlocked) {
-                const blockedNote = document.createElement('p');
-                blockedNote.className = 'blocked-text';
-                blockedNote.style.opacity = '0.7';
-                blockedNote.innerText = 'Tasks cannot be assigned during this period.';
-                section.appendChild(blockedNote);
+                card.innerHTML += `<p class="blocked-text">🔒 Tasks cannot be assigned during this period.</p>`;
             } else {
                 const ul = document.createElement('ul');
                 ul.className = 'task-list';
-
                 const sliceTasks = tasksBySlice[slice.id] || [];
                 sliceTasks.forEach(task => ul.appendChild(buildTaskHTML(task)));
-
-                section.appendChild(ul);
+                card.appendChild(ul);
             }
 
-            container.appendChild(section);
+            container.appendChild(card);
         });
     }
 
     if (unassignedTasks.length > 0) {
-        const unassignedSection = document.createElement('div');
-        unassignedSection.className = 'time-section unassigned';
-        unassignedSection.style.marginBottom = '1.5rem';
-
-        const header = document.createElement('h3');
-        header.innerText = 'Unassigned Tasks';
-        unassignedSection.appendChild(header);
+        const card = document.createElement('div');
+        card.className = 'slice-card';
+        card.innerHTML = `<div class="slice-header"><span class="slice-title">📌 Unassigned Tasks</span></div>`;
 
         const ul = document.createElement('ul');
         ul.className = 'task-list';
         unassignedTasks.forEach(task => ul.appendChild(buildTaskHTML(task)));
-        unassignedSection.appendChild(ul);
+        card.appendChild(ul);
 
-        container.appendChild(unassignedSection);
+        container.appendChild(card);
     }
 
     if (completedTaskList) {
@@ -439,41 +494,18 @@ function renderTasks(tasks) {
     }
 }
 
-// --- UTILITY & INIT ---
-
-function insertMarkdown(syntax) {
-    const textarea = document.getElementById('editTaskDescription');
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-
-    if (syntax === '**bold**') {
-        const selectedText = text.substring(start, end) || 'text';
-        textarea.value = text.substring(0, start) + '**' + selectedText + '**' + text.substring(end);
-    } else {
-        textarea.value = text.substring(0, start) + syntax + text.substring(end);
-    }
-
-    textarea.focus();
-    updatePreview();
-}
+// --- INIT ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    const generateBtn = document.getElementById('generateSlicesBtn');
-    if (generateBtn) generateBtn.addEventListener('click', generateSchedule);
-
-    const addBlockBtn = document.getElementById('addBlockBtn');
-    if (addBlockBtn) addBlockBtn.addEventListener('click', addBlockedRow);
-
-    updateSliceDropdowns();
+    computeTodaySlices();
 });
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('Service Worker registered:', reg.scope))
-            .catch(err => console.error('Service Worker failed:', err));
+            .then(reg => console.log('PWA Service Worker active'))
+            .catch(err => console.error('Service Worker error:', err));
     });
 }
 

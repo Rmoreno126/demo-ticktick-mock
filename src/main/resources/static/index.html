@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Tasks</title>
+    <title>My Tasks & Daily Slices</title>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="/manifest.json">
@@ -19,44 +19,95 @@
 <body>
 
 <div class="app-container">
-    <div class="header-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h2>My Tasks</h2>
-        <button type="button" class="btn-secondary" onclick="openScheduleModal()">⚙️ Schedule Day</button>
-    </div>
+    <!-- Top Navigation Tabs -->
+    <nav class="nav-tabs">
+        <button id="tabTasksBtn" class="tab-btn active" onclick="switchTab('tasks')">📋 Daily Tasks</button>
+        <button id="tabSettingsBtn" class="tab-btn" onclick="switchTab('settings')">⚙️ Weekly Schedule</button>
+    </nav>
 
-    <!-- Task Creation Form with Slice Selection -->
-    <form class="task-form" onsubmit="addTask(event)">
-        <input type="text" id="taskTitle" placeholder="What needs to be done?" required>
+    <!-- TAB 1: DAILY TASKS VIEW -->
+    <main id="tasksView" class="tab-content active">
+        <div class="header-row">
+            <h2>Today's Plan</h2>
+            <span id="currentDayBadge" class="day-badge">Today</span>
+        </div>
 
-        <select id="taskSlice">
-            <option value="">No Slice (Unassigned)</option>
-            <!-- Generated time slices injected dynamically -->
-        </select>
+        <!-- Task Creation Form (Responsive Wrapped Layout) -->
+        <form class="task-form" onsubmit="addTask(event)">
+            <input type="text" id="taskTitle" placeholder="What needs to be done?" required class="task-input">
 
-        <select id="taskPriority">
-            <option value="1">Low Priority</option>
-            <option value="2">Medium Priority</option>
-            <option value="3" selected>High Priority</option>
-        </select>
+            <div class="form-controls">
+                <select id="taskSlice" class="task-select">
+                    <option value="">No Slice (Unassigned)</option>
+                </select>
 
-        <button type="submit">Add Task</button>
-    </form>
+                <select id="taskPriority" class="task-select">
+                    <option value="1">Low</option>
+                    <option value="2">Med</option>
+                    <option value="3" selected>High</option>
+                </select>
 
-    <!-- Dynamic Day Slices & Tasks Container -->
-    <div id="scheduleSlicesContainer">
-        <!-- Generated time slices & unassigned tasks will be rendered here -->
-    </div>
+                <button type="submit" class="btn-primary add-btn">Add Task</button>
+            </div>
+        </form>
 
-    <!-- Fallback Task List for Unassigned Tasks -->
-    <ul class="task-list" id="taskList"></ul>
+        <!-- Dynamic Time Slices Container -->
+        <div id="scheduleSlicesContainer" class="slices-wrapper">
+            <!-- Slice cards and nested tasks injected here -->
+        </div>
 
-    <!-- Completed Section -->
-    <div id="completedSection" class="hidden">
-        <h3 class="completed-header">Completed</h3>
-        <ul class="task-list" id="completedTaskList">
-            <!-- Completed Tasks injected here -->
-        </ul>
-    </div>
+        <!-- Completed Tasks Section -->
+        <div id="completedSection" class="completed-card hidden">
+            <h3 class="completed-header">✓ Completed Tasks</h3>
+            <ul class="task-list" id="completedTaskList"></ul>
+        </div>
+    </main>
+
+    <!-- TAB 2: WEEKLY SCHEDULE SETTINGS -->
+    <main id="settingsView" class="tab-content hidden">
+        <div class="header-row">
+            <h2>Weekly Recurring Schedule</h2>
+        </div>
+        <p class="settings-subtitle">Set your regular class and work blocks. Your slices will auto-generate for whatever day of the week it is!</p>
+
+        <div class="settings-card">
+            <div class="global-times-group">
+                <div class="form-group">
+                    <label for="globalWakeTime">Wake Up / Start:</label>
+                    <input type="time" id="globalWakeTime" value="08:00">
+                </div>
+                <div class="form-group">
+                    <label for="globalSleepTime">Bedtime / End:</label>
+                    <input type="time" id="globalSleepTime" value="22:00">
+                </div>
+            </div>
+
+            <hr class="divider">
+
+            <div class="day-selector-group">
+                <label for="settingsDaySelect">Configure Schedule For:</label>
+                <select id="settingsDaySelect" onchange="loadDayScheduleInSettings()">
+                    <option value="Monday">Monday</option>
+                    <option value="Tuesday">Tuesday</option>
+                    <option value="Wednesday">Wednesday</option>
+                    <option value="Thursday">Thursday</option>
+                    <option value="Friday">Friday</option>
+                    <option value="Saturday">Saturday</option>
+                    <option value="Sunday">Sunday</option>
+                </select>
+            </div>
+
+            <div class="blocked-editor">
+                <h3>Blocked Time Windows (Class, Work, Commitments)</h3>
+                <div id="settingsBlockedContainer"></div>
+
+                <div class="settings-actions">
+                    <button type="button" class="btn-secondary" onclick="addSettingsBlockedRow()">+ Add Blocked Window</button>
+                    <button type="button" class="btn-primary" onclick="saveWeeklySchedule()">💾 Save Schedule</button>
+                </div>
+            </div>
+        </div>
+    </main>
 </div>
 
 <!-- Custom Edit Modal -->
@@ -71,10 +122,8 @@
             <input type="text" id="editTaskInput" placeholder="Task Title" class="input-field">
 
             <div class="form-group" style="margin: 10px 0;">
-                <label>Assigned Slice:</label>
-                <select id="editTaskSlice" class="input-field">
-                    <option value="">No Slice (Unassigned)</option>
-                </select>
+                <label>Assigned Time Slice:</label>
+                <select id="editTaskSlice" class="input-field"></select>
             </div>
 
             <div class="md-toolbar">
@@ -86,7 +135,6 @@
             </div>
 
             <textarea id="editTaskDescription" oninput="updatePreview()" placeholder="Add notes (Markdown supported)..."></textarea>
-
             <div id="editTaskPreview" class="markdown-preview"></div>
         </div>
 
@@ -97,51 +145,7 @@
     </div>
 </div>
 
-<!-- Day Setup / Schedule Modal -->
-<div id="scheduleModal" class="modal-overlay hidden">
-    <div class="modal-card">
-        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h2>Configure Today's Schedule</h2>
-            <button type="button" onclick="closeScheduleModal()" class="icon-btn">✖</button>
-        </div>
-
-        <div class="form-group">
-            <label>Wake Up Time / Start of Day:</label>
-            <input type="time" id="startTime" value="08:00">
-        </div>
-
-        <div class="form-group">
-            <label>Bedtime / End of Day:</label>
-            <input type="time" id="endTime" value="22:00">
-        </div>
-
-        <hr class="divider">
-
-        <h3>Blocked Time Windows (Class, Work, etc.)</h3>
-        <div id="blockedWindowsContainer">
-            <div class="blocked-row">
-                <input type="text" placeholder="Activity (e.g. Class)" class="block-label" value="Class">
-                <input type="time" class="block-start" value="10:00">
-                <span>to</span>
-                <input type="time" class="block-end" value="13:00">
-            </div>
-            <div class="blocked-row">
-                <input type="text" placeholder="Activity (e.g. Work)" class="block-label" value="Work">
-                <input type="time" class="block-start" value="14:30">
-                <span>to</span>
-                <input type="time" class="block-end" value="18:00">
-            </div>
-        </div>
-
-        <button type="button" id="addBlockBtn" class="btn-secondary">+ Add Blocked Window</button>
-
-        <div class="modal-actions">
-            <button type="button" id="generateSlicesBtn" class="btn-primary">Generate Slices</button>
-        </div>
-    </div>
-</div>
-
-<!-- Custom Delete Modal -->
+<!-- Delete Confirmation Modal -->
 <div id="deleteModal" class="modal-overlay hidden">
     <div class="modal-content">
         <div class="modal-header">
