@@ -4,7 +4,7 @@ let currentDeleteId = null;
 let allTasks = [];
 let todaySlices = [];
 
-// Default Weekly Recurring Schedule Structure
+// Default Weekly Schedule
 const DEFAULT_WEEKLY_SCHEDULE = {
     wakeTime: "08:00",
     sleepTime: "22:00",
@@ -42,8 +42,7 @@ function getWeeklySchedule() {
     }
 }
 
-// --- CUSTOM TOAST NOTIFICATION (Replaces alert popup) ---
-
+// Custom Toast Notification
 function showToast(message) {
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMessage');
@@ -52,7 +51,6 @@ function showToast(message) {
     toastMsg.innerText = message;
     toast.classList.remove('hidden');
 
-    // Trigger CSS transition
     setTimeout(() => toast.classList.add('show'), 10);
 
     setTimeout(() => {
@@ -61,8 +59,7 @@ function showToast(message) {
     }, 2500);
 }
 
-// --- TAB SWITCHER ---
-
+// Tab Switcher
 function switchTab(tabName) {
     const tasksView = document.getElementById('tasksView');
     const settingsView = document.getElementById('settingsView');
@@ -93,8 +90,7 @@ function switchTab(tabName) {
     }
 }
 
-// --- DYNAMIC DAY & SLICE CALCULATION ---
-
+// Day & Slices Computation
 function getCurrentDayName() {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[new Date().getDay()];
@@ -174,8 +170,7 @@ function updateSliceDropdowns() {
     if (editTaskSliceSelect) editTaskSliceSelect.innerHTML = optionsHTML;
 }
 
-// --- SETTINGS VIEW MANAGEMENT ---
-
+// Settings
 function loadWeeklyScheduleIntoSettings() {
     const schedule = getWeeklySchedule();
     document.getElementById('globalWakeTime').value = schedule.wakeTime || "08:00";
@@ -245,8 +240,7 @@ function saveWeeklySchedule() {
     showToast(`✓ Schedule for ${selectedDay} saved!`);
 }
 
-// --- FETCH & TASK MANAGEMENT ---
-
+// Fetch & Task Management
 async function fetchTasks() {
     try {
         const response = await fetch(API_URL);
@@ -324,9 +318,21 @@ function cleanDescription(description) {
     return description.replace(/\[slice:(.*?)\]/g, '').trim();
 }
 
+function insertMarkdown(syntax) {
+    const textarea = document.getElementById('editTaskDescription');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+
+    textarea.value = text.substring(0, start) + syntax + text.substring(end);
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = start + syntax.length;
+}
+
 function editTask(id) {
     currentEditId = id;
     const task = allTasks.find(t => t.id === id);
+    if (!task) return;
 
     document.getElementById('editTaskInput').value = task.title;
     document.getElementById('editTaskDescription').value = cleanDescription(task.description);
@@ -337,7 +343,6 @@ function editTask(id) {
     }
 
     document.getElementById('editModal').classList.remove('hidden');
-    updatePreview();
 }
 
 function closeEditModal() {
@@ -376,8 +381,7 @@ async function submitEdit() {
     }
 }
 
-// --- SUBTASK & MARKDOWN PREVIEW ---
-
+// Subtask Logic & Interactive Board Toggling
 const SUBTASK_REGEX = /\[\s*([xX]?)\s*\]/g;
 
 function getSubtaskStats(description) {
@@ -390,16 +394,33 @@ function getSubtaskStats(description) {
     return { completed, total };
 }
 
-function updatePreview() {
-    const rawText = document.getElementById('editTaskDescription').value;
+async function toggleTaskSubtask(taskId, subtaskIndex) {
+    const task = allTasks.find(t => t.id === taskId);
+    if (!task) return;
 
-    let cbIndex = 0;
-    let processedText = rawText.replace(SUBTASK_REGEX, (match, group1) => {
-        const isChecked = group1.toLowerCase() === 'x';
-        return `<input type="checkbox" class="subtask-cb" ${isChecked ? 'checked' : ''} onclick="toggleSubtask(${cbIndex++})">`;
+    let desc = task.description || '';
+    let matchIdx = 0;
+
+    let updatedDesc = desc.replace(SUBTASK_REGEX, (match, group1) => {
+        if (matchIdx === subtaskIndex) {
+            const isChecked = group1.toLowerCase() === 'x';
+            matchIdx++;
+            return isChecked ? '[ ]' : '[x]';
+        }
+        matchIdx++;
+        return match;
     });
 
-    document.getElementById('editTaskPreview').innerHTML = marked.parse(processedText);
+    try {
+        await fetch(`${API_URL}/${taskId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...task, description: updatedDesc })
+        });
+        fetchTasks();
+    } catch (e) {
+        console.error('Error toggling subtask:', e);
+    }
 }
 
 async function toggleRollover(id) {
@@ -411,8 +432,7 @@ async function toggleRollover(id) {
     }
 }
 
-// --- RENDER TASKS GROUPED INTO SLICE CARDS ---
-
+// Board Rendering
 function renderTasks(tasks) {
     const container = document.getElementById('scheduleSlicesContainer');
     const completedTaskList = document.getElementById('completedTaskList');
@@ -439,21 +459,35 @@ function renderTasks(tasks) {
         let subtaskBadgeHTML = '';
         if (subtaskStats) {
             const isAllDone = subtaskStats.completed === subtaskStats.total;
-            subtaskBadgeHTML = `<span class="subtask-badge ${isAllDone ? 'all-done' : ''}">✓ ${subtaskStats.completed}/${subtaskStats.total}</span>`;
+            subtaskBadgeHTML = `<span class="subtask-badge ${isAllDone ? 'all-done' : ''}">${subtaskStats.completed}/${subtaskStats.total}</span>`;
+        }
+
+        let notesHTML = '';
+        if (cleanDesc) {
+            let cbIdx = 0;
+            let parsedMarkdown = cleanDesc.replace(SUBTASK_REGEX, (match, group1) => {
+                const isChecked = group1.toLowerCase() === 'x';
+                const idx = cbIdx++;
+                return `<input type="checkbox" ${isChecked ? 'checked' : ''} onclick="toggleTaskSubtask(${task.id}, ${idx})">`;
+            });
+            notesHTML = `<div class="task-notes-rendered">${marked.parse(parsedMarkdown)}</div>`;
         }
 
         li.innerHTML = `
-            <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} onchange="completeTask(${task.id})">
-            <span class="task-title">${task.title}</span>
-            ${subtaskBadgeHTML}
-            <span class="priority-badge prio-${task.priority}">
-                ${task.priority === 3 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
-            </span>
-            <div class="task-actions">
-                <button class="icon-btn rollover-btn ${task.rollover ? 'active' : ''}" onclick="toggleRollover(${task.id})" title="Rollover to tomorrow">➔</button>
-                <button class="icon-btn edit-btn" onclick="editTask(${task.id})">✎</button>
-                <button class="icon-btn delete-btn" onclick="deleteTask(${task.id})">✖</button>
+            <div class="task-item-main">
+                <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} onchange="completeTask(${task.id})">
+                <span class="task-title">${task.title}</span>
+                ${subtaskBadgeHTML}
+                <span class="priority-badge prio-${task.priority}">
+                    ${task.priority === 3 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
+                </span>
+                <div class="task-actions">
+                    <button class="icon-btn rollover-btn ${task.rollover ? 'active' : ''}" onclick="toggleRollover(${task.id})" title="Rollover to tomorrow">➔</button>
+                    <button class="icon-btn edit-btn" onclick="editTask(${task.id})">✎</button>
+                    <button class="icon-btn delete-btn" onclick="deleteTask(${task.id})">✖</button>
+                </div>
             </div>
+            ${notesHTML}
         `;
         return li;
     };
@@ -513,13 +547,11 @@ function renderTasks(tasks) {
     }
 }
 
-// --- INIT ---
-
+// Init
 document.addEventListener('DOMContentLoaded', () => {
     computeTodaySlices();
 });
 
-// Register Service Worker
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')

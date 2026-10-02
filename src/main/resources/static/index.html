@@ -112,42 +112,47 @@
     </main>
 </div>
 
-<!-- Floating Toast Notification (Replaces Browser Alert) -->
+<!-- Floating Toast Notification -->
 <div id="toast" class="toast-notification hidden">
     <span id="toastMessage"></span>
 </div>
 
-<!-- Custom Edit Modal -->
+<!-- Redesigned Edit Task Modal -->
 <div id="editModal" class="modal-overlay hidden">
-    <div class="modal-content sticky-note">
+    <div class="modal-content edit-modal-large">
         <div class="modal-header">
             <h3>Edit Task</h3>
             <button type="button" onclick="closeEditModal()" class="icon-btn">✖</button>
         </div>
 
         <div class="modal-body">
-            <input type="text" id="editTaskInput" placeholder="Task Title" class="input-field">
+            <div class="edit-field-group">
+                <label for="editTaskInput">Task Title</label>
+                <input type="text" id="editTaskInput" placeholder="Task Title" class="input-field">
+            </div>
 
-            <div class="form-group" style="margin: 10px 0;">
-                <label>Assigned Time Slice:</label>
+            <div class="edit-field-group">
+                <label for="editTaskSlice">Assigned Time Slice</label>
                 <select id="editTaskSlice" class="input-field"></select>
             </div>
 
-            <div class="md-toolbar">
-                <button type="button" onclick="insertMarkdown('[ ] ')">☑ Task</button>
-                <button type="button" onclick="insertMarkdown('- ')">• List</button>
-                <button type="button" onclick="insertMarkdown('1. ')">1. Number</button>
-                <button type="button" onclick="insertMarkdown('### ')">H3</button>
-                <button type="button" onclick="insertMarkdown('**bold**')">Bold</button>
-            </div>
+            <div class="edit-field-group">
+                <label>Additional Notes (Markdown Supported)</label>
+                <div class="md-toolbar">
+                    <button type="button" onclick="insertMarkdown('[ ] ')">☑ Task</button>
+                    <button type="button" onclick="insertMarkdown('- ')">• List</button>
+                    <button type="button" onclick="insertMarkdown('1. ')">1. Number</button>
+                    <button type="button" onclick="insertMarkdown('### ')">H3</button>
+                    <button type="button" onclick="insertMarkdown('**bold**')">Bold</button>
+                </div>
 
-            <textarea id="editTaskDescription" oninput="updatePreview()" placeholder="Add notes (Markdown supported)..."></textarea>
-            <div id="editTaskPreview" class="markdown-preview"></div>
+                <textarea id="editTaskDescription" placeholder="Add subtasks or notes here using Markdown...&#10;- [ ] Subtask 1&#10;- [ ] Subtask 2"></textarea>
+            </div>
         </div>
 
         <div class="modal-footer">
             <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
-            <button type="button" class="btn-primary" onclick="submitEdit()">Save</button>
+            <button type="button" class="btn-primary" onclick="submitEdit()">Save Changes</button>
         </div>
     </div>
 </div>
