@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tasks</title>
+
+    <!-- PWA Setup -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tasks">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+<div class="app-container">
+    <h2>My Tasks</h2>
+
+    <form class="task-form" onsubmit="addTask(event)">
+        <input type="text" id="taskTitle" placeholder="What needs to be done?" required>
+        <select id="taskPriority">
+            <option value="1">Low Priority</option>
+            <option value="2">Medium Priority</option>
+            <option value="3" selected>High Priority</option>
+        </select>
+        <button type="submit">Add Task</button>
+    </form>
+
+    <ul class="task-list" id="taskList">
+        <!-- Tasks will be injected here -->
+    </ul>
+
+    <!-- Completed Section -->
+    <div id="completedSection" class="hidden">
+        <h3 class="completed-header">Completed</h3>
+        <ul class="task-list" id="completedTaskList">
+            <!-- Completed Tasks injected here -->
+        </ul>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="script.js"></script>
+
+<!-- Custom Edit Modal (Sticky Note Style) -->
+<div id="editModal" class="modal-overlay hidden">
+    <div class="modal-content sticky-note">
+        <div class="modal-header">
+            <h3>Edit Task</h3>
+            <button type="button" onclick="closeEditModal()" class="icon-btn">✖</button>
+        </div>
+
+        <div class="modal-body">
+            <input type="text" id="editTaskInput" placeholder="Task Title" class="input-field">
+
+            <div class="md-toolbar">
+                <button type="button" onclick="insertMarkdown('[ ] ')">☑ Task</button>
+                <button type="button" onclick="insertMarkdown('- ')">• List</button>
+                <button type="button" onclick="insertMarkdown('1. ')">1. Number</button>
+                <button type="button" onclick="insertMarkdown('### ')">H3</button>
+                <button type="button" onclick="insertMarkdown('**bold**')">Bold</button>
+            </div>
+
+            <textarea id="editTaskDescription" oninput="updatePreview()" placeholder="Add notes (Markdown supported)..."></textarea>
+
+            <div id="editTaskPreview" class="markdown-preview"></div>
+        </div>
+
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+            <button type="button" class="btn-primary" onclick="submitEdit()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Delete Modal -->
+<div id="deleteModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Delete Task?</h3>
+            <button type="button" onclick="closeDeleteModal()" class="icon-btn">✖</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete this task? This cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            <button type="button" class="btn-delete" onclick="submitDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+</body>
+</html>
