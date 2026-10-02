@@ -377,29 +377,29 @@ async function fetchTasks() {
     }
 }
 
+// 1. UPDATE: Task creation with exact custom notification and automatic slice placement
 async function addTask(event) {
     event.preventDefault();
     const titleInput = document.getElementById('taskTitle');
     const priorityInput = document.getElementById('taskPriority');
-    const sliceSelect = document.getElementById('taskSlice');
     const startTimeInput = document.getElementById('taskStartTime');
 
     const startTime = startTimeInput ? startTimeInput.value : '';
-    let selectedSlice = sliceSelect ? sliceSelect.value : '';
 
     if (startTime) {
         const blockedReason = checkTimeInBlockedWindow(startTime);
         if (blockedReason) {
-            showToast(`⚠️ Cannot add task: ${startTime} falls in a blocked window (${blockedReason})`);
+            // Updated custom notification message
+            showToast("Yo, you can't do that. pick a diff time...");
             return;
-        }
-        if (!selectedSlice) {
-            selectedSlice = findSliceForTime(startTime);
         }
     }
 
+    // Auto-determine which open slice contains this start time
+    const autoSliceId = findSliceForTime(startTime);
+
     let metaString = '';
-    if (selectedSlice) metaString += `[slice:${selectedSlice}]`;
+    if (autoSliceId) metaString += `[slice:${autoSliceId}]`;
     if (startTime) metaString += `[time:${startTime}]`;
 
     const newTask = {
@@ -421,6 +421,62 @@ async function addTask(event) {
         console.error('Error adding task:', error);
     }
 }
+
+// 2. NEW: Drag-and-Drop Event Handlers
+function handleDragStart(e, taskId) {
+    e.dataTransfer.setData('text/plain', taskId.toString());
+    e.target.classList.add('dragging');
+}
+
+function handleDragEnd(e) {
+    e.target.classList.remove('dragging');
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    const card = e.currentTarget;
+    if (!card.classList.contains('blocked')) {
+        card.classList.add('drag-over');
+    }
+}
+
+function handleDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+}
+
+async function handleDrop(e, targetSliceId) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+
+    const taskId = parseInt(e.dataTransfer.getData('text/plain'));
+    const task = allTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const currentTime = getTaskTime(task);
+    const cleanDesc = cleanDescription(task.description);
+
+    // Update slice assignment metadata while preserving existing time & notes
+    let newMeta = `[slice:${targetSliceId}]`;
+    if (currentTime) newMeta += `[time:${currentTime}]`;
+
+    const updatedDesc = newMeta ? `${newMeta}\n${cleanDesc}` : cleanDesc;
+
+    try {
+        await fetch(`${API_URL}/${taskId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ...task,
+                description: updatedDesc.trim()
+            })
+        });
+        fetchTasks();
+    } catch (err) {
+        console.error('Error dropping task into new slice:', err);
+    }
+}
+
+
 
 async function completeTask(id) {
     try {
@@ -623,6 +679,7 @@ function formatDisplayTime(timeStr) {
 }
 
 // Board Rendering with Chronological Task Sorting
+// 3. UPDATE: renderTasks function (Enforces past slice dimming & Drag-and-Drop attributes)
 function renderTasks(tasks) {
     const container = document.getElementById('scheduleSlicesContainer');
     const completedTaskList = document.getElementById('completedTaskList');
@@ -640,9 +697,18 @@ function renderTasks(tasks) {
         completedSection.classList.toggle('hidden', completedTasks.length === 0);
     }
 
+    const now = new Date();
+
     const buildTaskHTML = (task) => {
         const li = document.createElement('li');
         li.className = `task-item ${task.completed ? 'completed' : ''} ${task.rollover ? 'is-rollover' : ''}`;
+
+        // Enable dragging on active tasks
+        if (!task.completed) {
+            li.setAttribute('draggable', 'true');
+            li.ondragstart = (e) => handleDragStart(e, task.id);
+            li.ondragend = handleDragEnd;
+        }
 
         const cleanDesc = cleanDescription(task.description);
         const subtaskStats = getSubtaskStats(cleanDesc);
@@ -652,6 +718,7 @@ function renderTasks(tasks) {
             subtaskBadgeHTML = `<span class="subtask-badge ${isAllDone ? 'all-done' : ''}">${subtaskStats.completed}/${subtaskStats.total}</span>`;
         }
 
+        // Visible time preview badge
         const taskTime = getTaskTime(task);
         let timeBadgeHTML = '';
         if (taskTime) {
@@ -698,7 +765,6 @@ function renderTasks(tasks) {
         return li;
     };
 
-    // Group tasks into Slices
     const tasksBySlice = {};
     const unassignedTasks = [];
 
@@ -712,7 +778,6 @@ function renderTasks(tasks) {
         }
     });
 
-    // Sort tasks inside each slice by start time
     const sortTasksByTime = (taskList) => {
         return taskList.sort((a, b) => {
             const timeA = getTaskTime(a);
@@ -726,12 +791,25 @@ function renderTasks(tasks) {
 
     if (todaySlices.length > 0) {
         todaySlices.forEach(slice => {
+            const isPastSlice = !slice.isBlocked && now > slice.end;
+
             const card = document.createElement('div');
-            card.className = slice.isBlocked ? 'slice-card blocked' : 'slice-card';
+            card.className = slice.isBlocked
+                ? 'slice-card blocked'
+                : isPastSlice
+                    ? 'slice-card past'
+                    : 'slice-card';
+
+            // Enable drop target for open slices (even past ones)
+            if (!slice.isBlocked) {
+                card.ondragover = handleDragOver;
+                card.ondragleave = handleDragLeave;
+                card.ondrop = (e) => handleDrop(e, slice.id);
+            }
 
             const header = document.createElement('div');
             header.className = 'slice-header';
-            header.innerHTML = `<span class="slice-title">${slice.label}</span>`;
+            header.innerHTML = `<span class="slice-title">${slice.label}${isPastSlice ? ' (Ended)' : ''}</span>`;
             card.appendChild(header);
 
             if (slice.isBlocked) {

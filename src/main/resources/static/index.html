@@ -36,18 +36,14 @@
             <span id="currentDayBadge" class="day-badge">Today</span>
         </div>
 
-        <!-- Task Creation Form -->
+        <!-- UPDATE: Simplified task-form inside #tasksView -->
         <form class="task-form" onsubmit="addTask(event)">
             <input type="text" id="taskTitle" placeholder="What needs to be done?" required class="task-input">
 
             <div class="form-controls">
-                <select id="taskSlice" class="task-select">
-                    <option value="">No Slice (Unassigned)</option>
-                </select>
-
                 <div class="time-picker-wrapper">
                     <label for="taskStartTime" class="input-inline-label">Start Time:</label>
-                    <input type="time" id="taskStartTime" class="task-select time-input">
+                    <input type="time" id="taskStartTime" class="task-select time-input" required>
                 </div>
 
                 <select id="taskPriority" class="task-select">

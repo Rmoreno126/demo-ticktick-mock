@@ -247,14 +247,16 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 .task-title { flex: 1; font-size: 0.95rem; font-weight: 600; }
 
+/* Enhanced prominent time badge */
 .task-time-badge {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     background: #0284c7;
     color: #ffffff;
-    padding: 0.15rem 0.5rem;
-    border-radius: 12px;
-    font-weight: 600;
-    white-space: nowrap;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .priority-badge {
@@ -567,6 +569,35 @@ textarea#editTaskDescription {
     margin-top: 1.2rem;
     border-top: 1px solid var(--card-border);
     padding-top: 1rem;
+}
+
+/* NEW: Dimmed style for past/expired slices */
+.slice-card.past {
+    opacity: 0.45;
+    background: #0b1120;
+    border-style: dashed;
+    filter: grayscale(40%);
+    transition: opacity 0.3s ease;
+}
+
+.slice-card.past:hover {
+    opacity: 0.85; /* Slightly brightens on hover when managing/dragging */
+}
+
+/* NEW: Drag and Drop styles */
+.task-item[draggable="true"] {
+    cursor: grab;
+}
+
+.task-item.dragging {
+    opacity: 0.4;
+    border: 2px dashed var(--primary-color);
+}
+
+.slice-card.drag-over {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+    background: #111e38;
 }
 
 .btn-primary { background: var(--primary-color); color: #0f172a; border: none; font-weight: bold; border-radius: 6px; padding: 0.6rem 1.2rem; cursor: pointer; }
