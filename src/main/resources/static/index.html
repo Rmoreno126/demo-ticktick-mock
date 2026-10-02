@@ -45,6 +45,11 @@
                     <option value="">No Slice (Unassigned)</option>
                 </select>
 
+                <div class="time-picker-wrapper">
+                    <label for="taskStartTime" class="input-inline-label">Start Time:</label>
+                    <input type="time" id="taskStartTime" class="task-select time-input">
+                </div>
+
                 <select id="taskPriority" class="task-select">
                     <option value="1">Low</option>
                     <option value="2">Med</option>
@@ -70,7 +75,7 @@
         <div class="header-row">
             <h2>Weekly Recurring Schedule</h2>
         </div>
-        <p class="settings-subtitle">Set your regular class and work blocks. Slices auto-generate based on the day of the week!</p>
+        <p class="settings-subtitle">Set regular class/work blocks and custom time splits. Slices auto-generate based on the day of the week!</p>
 
         <div class="settings-card">
             <div class="global-times-group">
@@ -108,8 +113,20 @@
                         <button type="button" class="btn-secondary" onclick="addSettingsBlockedRow()">+ Add Blocked Window</button>
                         <button type="button" class="btn-clear" onclick="clearSettingsBlockedRows()">🗑️ Clear All Blocks</button>
                     </div>
-                    <button type="button" class="btn-primary" onclick="saveWeeklySchedule()">💾 Save Schedule</button>
                 </div>
+            </div>
+
+            <hr class="divider">
+
+            <div class="divisions-editor">
+                <h3>Custom Slice Divisions (Split Open Times)</h3>
+                <p class="settings-subtitle">Add split times to divide open periods into distinct slices (e.g., 01:00 PM).</p>
+                <div id="settingsDivisionsContainer"></div>
+                <button type="button" class="btn-secondary" onclick="addSettingsDivisionRow()">+ Add Split Time</button>
+            </div>
+
+            <div class="save-footer">
+                <button type="button" class="btn-primary btn-save-large" onclick="saveWeeklySchedule()">💾 Save Schedule</button>
             </div>
         </div>
     </main>
@@ -134,9 +151,16 @@
                 <input type="text" id="editTaskInput" placeholder="Task Title" class="input-field">
             </div>
 
-            <div class="edit-field-group">
-                <label for="editTaskSlice">Assigned Time Slice</label>
-                <select id="editTaskSlice" class="input-field"></select>
+            <div class="edit-row">
+                <div class="edit-field-group flex-1">
+                    <label for="editTaskSlice">Assigned Time Slice</label>
+                    <select id="editTaskSlice" class="input-field"></select>
+                </div>
+
+                <div class="edit-field-group flex-1">
+                    <label for="editTaskStartTime">Start Time</label>
+                    <input type="time" id="editTaskStartTime" class="input-field">
+                </div>
             </div>
 
             <div class="edit-field-group">

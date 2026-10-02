@@ -8,32 +8,42 @@ let currentDeleteId = null;
 let allTasks = [];
 let todaySlices = [];
 
-// Default Weekly Schedule
+// Default Weekly Schedule Supporting Blocks and Divisions
 const DEFAULT_WEEKLY_SCHEDULE = {
     wakeTime: "08:00",
     sleepTime: "22:00",
     days: {
-        Monday: [
-            { label: "Class", start: "10:00", end: "13:00" },
-            { label: "Class", start: "16:00", end: "17:00" }
-        ],
-        Tuesday: [
-            { label: "Class", start: "11:00", end: "12:30" },
-            { label: "Class", start: "13:00", end: "14:30" },
-            { label: "Class", start: "15:00", end: "17:00" }
-        ],
-        Wednesday: [
-            { label: "Class", start: "10:00", end: "13:00" }
-        ],
-        Thursday: [
-            { label: "Class", start: "11:00", end: "12:30" },
-            { label: "Work", start: "14:00", end: "18:00" }
-        ],
-        Friday: [
-            { label: "Work", start: "09:00", end: "13:00" }
-        ],
-        Saturday: [],
-        Sunday: []
+        Monday: {
+            blocks: [
+                { label: "Class", start: "10:00", end: "13:00" },
+                { label: "Class", start: "16:00", end: "17:00" }
+            ],
+            divisions: []
+        },
+        Tuesday: {
+            blocks: [
+                { label: "Class", start: "11:00", end: "12:30" },
+                { label: "Class", start: "13:00", end: "14:30" }
+            ],
+            divisions: []
+        },
+        Wednesday: {
+            blocks: [{ label: "Class", start: "10:00", end: "13:00" }],
+            divisions: []
+        },
+        Thursday: {
+            blocks: [
+                { label: "Class", start: "11:00", end: "12:30" },
+                { label: "Work", start: "14:00", end: "18:00" }
+            ],
+            divisions: []
+        },
+        Friday: {
+            blocks: [{ label: "Work", start: "09:00", end: "13:00" }],
+            divisions: []
+        },
+        Saturday: { blocks: [], divisions: ["13:00"] },
+        Sunday: { blocks: [], divisions: [] }
     }
 };
 
@@ -44,6 +54,17 @@ function getWeeklySchedule() {
     } catch (e) {
         return DEFAULT_WEEKLY_SCHEDULE;
     }
+}
+
+// Normalizer for backward compatibility
+function getDayData(schedule, dayName) {
+    const raw = schedule.days ? schedule.days[dayName] : null;
+    if (!raw) return { blocks: [], divisions: [] };
+    if (Array.isArray(raw)) return { blocks: raw, divisions: [] };
+    return {
+        blocks: raw.blocks || [],
+        divisions: raw.divisions || []
+    };
 }
 
 // Custom Toast Notification
@@ -60,7 +81,7 @@ function showToast(message) {
     setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => toast.classList.add('hidden'), 300);
-    }, 2500);
+    }, 3000);
 }
 
 // Tab Switcher
@@ -94,7 +115,6 @@ function switchTab(tabName) {
     }
 }
 
-// Day & Slices Computation
 function getCurrentDayName() {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[new Date().getDay()];
@@ -104,6 +124,13 @@ function formatTimeStr(date) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function format24Hour(date) {
+    const h = String(date.getHours()).padStart(2, '0');
+    const m = String(date.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+}
+
+// Compute Slices Handling Wake/Sleep, Blocked Windows, and Custom Split Divisions
 function computeTodaySlices() {
     const dayName = getCurrentDayName();
     const dayBadge = document.getElementById('currentDayBadge');
@@ -112,7 +139,7 @@ function computeTodaySlices() {
     const schedule = getWeeklySchedule();
     const wakeVal = schedule.wakeTime || "08:00";
     const sleepVal = schedule.sleepTime || "22:00";
-    const dayBlocks = schedule.days[dayName] || [];
+    const dayData = getDayData(schedule, dayName);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const baseDate = `${todayStr}T`;
@@ -121,7 +148,7 @@ function computeTodaySlices() {
     let sleepTime = new Date(`${baseDate}${sleepVal}:00`);
     if (sleepTime <= wakeTime) sleepTime.setDate(sleepTime.getDate() + 1);
 
-    const parsedBlocks = dayBlocks.map(b => {
+    const parsedBlocks = dayData.blocks.map(b => {
         let bStart = new Date(`${baseDate}${b.start}:00`);
         let bEnd = new Date(`${baseDate}${b.end}:00`);
         if (bStart < wakeTime) bStart.setDate(bStart.getDate() + 1);
@@ -129,33 +156,69 @@ function computeTodaySlices() {
         return { label: b.label || 'Blocked', start: bStart, end: bEnd, isBlocked: true };
     }).sort((a, b) => a.start - b.start);
 
-    let intervals = [];
-    let currentTime = new Date(wakeTime);
-    let sliceNum = 1;
+    // Initial open segments between blocked windows
+    let rawOpenIntervals = [];
+    let curTime = new Date(wakeTime);
 
     parsedBlocks.forEach(block => {
-        if (currentTime < block.start) {
-            const id = `slice_${sliceNum++}`;
-            const label = `Slice ${sliceNum - 1}: ${formatTimeStr(currentTime)} - ${formatTimeStr(block.start)}`;
-            intervals.push({ id, label, start: new Date(currentTime), end: new Date(block.start), isBlocked: false });
+        if (curTime < block.start) {
+            rawOpenIntervals.push({ start: new Date(curTime), end: new Date(block.start) });
         }
-        intervals.push({
-            id: `blocked_${Date.now()}_${Math.random()}`,
-            label: `🚫 ${block.label} (${formatTimeStr(block.start)} - ${formatTimeStr(block.end)})`,
-            start: block.start,
-            end: block.end,
-            isBlocked: true
-        });
-        currentTime = new Date(Math.max(currentTime, block.end));
+        curTime = new Date(Math.max(curTime, block.end));
     });
-
-    if (currentTime < sleepTime) {
-        const id = `slice_${sliceNum++}`;
-        const label = `Slice ${sliceNum - 1}: ${formatTimeStr(currentTime)} - ${formatTimeStr(sleepTime)}`;
-        intervals.push({ id, label, start: new Date(currentTime), end: new Date(sleepTime), isBlocked: false });
+    if (curTime < sleepTime) {
+        rawOpenIntervals.push({ start: new Date(curTime), end: new Date(sleepTime) });
     }
 
-    todaySlices = intervals;
+    // Apply custom division split times to open intervals
+    const divisionDates = (dayData.divisions || []).map(divStr => {
+        let d = new Date(`${baseDate}${divStr}:00`);
+        if (d < wakeTime) d.setDate(d.getDate() + 1);
+        return d;
+    }).sort((a, b) => a - b);
+
+    let splitOpenIntervals = [];
+    rawOpenIntervals.forEach(interval => {
+        let currentSubStart = new Date(interval.start);
+        divisionDates.forEach(divDate => {
+            if (divDate > currentSubStart && divDate < interval.end) {
+                splitOpenIntervals.push({ start: new Date(currentSubStart), end: new Date(divDate) });
+                currentSubStart = new Date(divDate);
+            }
+        });
+        if (currentSubStart < interval.end) {
+            splitOpenIntervals.push({ start: new Date(currentSubStart), end: new Date(interval.end) });
+        }
+    });
+
+    // Merge split open intervals with blocked windows, ordered chronologically
+    let combined = [];
+    splitOpenIntervals.forEach(i => combined.push({ ...i, isBlocked: false }));
+    parsedBlocks.forEach(b => combined.push({ ...b, isBlocked: true }));
+    combined.sort((a, b) => a.start - b.start);
+
+    let sliceNum = 1;
+    todaySlices = combined.map(item => {
+        if (item.isBlocked) {
+            return {
+                id: `blocked_${item.start.getTime()}`,
+                label: `🚫 ${item.label} (${formatTimeStr(item.start)} - ${formatTimeStr(item.end)})`,
+                start: item.start,
+                end: item.end,
+                isBlocked: true
+            };
+        } else {
+            const id = `slice_${sliceNum++}`;
+            return {
+                id,
+                label: `Slice ${sliceNum - 1}: ${formatTimeStr(item.start)} - ${formatTimeStr(item.end)}`,
+                start: item.start,
+                end: item.end,
+                isBlocked: false
+            };
+        }
+    });
+
     updateSliceDropdowns();
 }
 
@@ -174,7 +237,34 @@ function updateSliceDropdowns() {
     if (editTaskSliceSelect) editTaskSliceSelect.innerHTML = optionsHTML;
 }
 
-// Settings
+// Time Validation
+function checkTimeInBlockedWindow(timeVal) {
+    if (!timeVal) return null;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const targetDate = new Date(`${todayStr}T${timeVal}:00`);
+
+    for (const slice of todaySlices) {
+        if (slice.isBlocked && targetDate >= slice.start && targetDate < slice.end) {
+            return slice.label;
+        }
+    }
+    return null;
+}
+
+function findSliceForTime(timeVal) {
+    if (!timeVal) return '';
+    const todayStr = new Date().toISOString().split('T')[0];
+    const targetDate = new Date(`${todayStr}T${timeVal}:00`);
+
+    for (const slice of todaySlices) {
+        if (!slice.isBlocked && targetDate >= slice.start && targetDate < slice.end) {
+            return slice.id;
+        }
+    }
+    return '';
+}
+
+// Settings Views
 function loadWeeklyScheduleIntoSettings() {
     const schedule = getWeeklySchedule();
     document.getElementById('globalWakeTime').value = schedule.wakeTime || "08:00";
@@ -190,15 +280,15 @@ function loadWeeklyScheduleIntoSettings() {
 function loadDayScheduleInSettings() {
     const selectedDay = document.getElementById('settingsDaySelect').value;
     const schedule = getWeeklySchedule();
-    const dayBlocks = (schedule.days && schedule.days[selectedDay]) ? schedule.days[selectedDay] : [];
+    const dayData = getDayData(schedule, selectedDay);
 
-    const container = document.getElementById('settingsBlockedContainer');
-    if (!container) return;
-    container.innerHTML = '';
+    const blockedContainer = document.getElementById('settingsBlockedContainer');
+    if (blockedContainer) blockedContainer.innerHTML = '';
+    dayData.blocks.forEach(b => addSettingsBlockedRow(b.label, b.start, b.end));
 
-    dayBlocks.forEach(b => {
-        addSettingsBlockedRow(b.label, b.start, b.end);
-    });
+    const divContainer = document.getElementById('settingsDivisionsContainer');
+    if (divContainer) divContainer.innerHTML = '';
+    dayData.divisions.forEach(d => addSettingsDivisionRow(d));
 }
 
 function addSettingsBlockedRow(label = '', start = '10:00', end = '12:00') {
@@ -217,9 +307,27 @@ function addSettingsBlockedRow(label = '', start = '10:00', end = '12:00') {
     container.appendChild(row);
 }
 
+// Clear All Blocks with Confirmation
 function clearSettingsBlockedRows() {
-    const container = document.getElementById('settingsBlockedContainer');
-    if (container) container.innerHTML = '';
+    if (confirm("Are you sure you want to clear all blocked time windows for this day?")) {
+        const container = document.getElementById('settingsBlockedContainer');
+        if (container) container.innerHTML = '';
+        showToast("Cleared all blocked time windows for selected day.");
+    }
+}
+
+function addSettingsDivisionRow(time = '13:00') {
+    const container = document.getElementById('settingsDivisionsContainer');
+    if (!container) return;
+
+    const row = document.createElement('div');
+    row.className = 'division-row';
+    row.innerHTML = `
+        <span>Split at:</span>
+        <input type="time" class="division-time" value="${time}">
+        <button type="button" onclick="this.parentElement.remove()" class="icon-btn">✖</button>
+    `;
+    container.appendChild(row);
 }
 
 function saveWeeklySchedule() {
@@ -231,10 +339,9 @@ function saveWeeklySchedule() {
     schedule.wakeTime = wakeTime;
     schedule.sleepTime = sleepTime;
 
-    const rows = document.querySelectorAll('#settingsBlockedContainer .blocked-row');
+    const blockRows = document.querySelectorAll('#settingsBlockedContainer .blocked-row');
     const updatedBlocks = [];
-
-    rows.forEach(row => {
+    blockRows.forEach(row => {
         const label = row.querySelector('.block-label').value;
         const start = row.querySelector('.block-start').value;
         const end = row.querySelector('.block-end').value;
@@ -243,9 +350,19 @@ function saveWeeklySchedule() {
         }
     });
 
-    schedule.days[selectedDay] = updatedBlocks;
-    localStorage.setItem('weekly_recurring_schedule', JSON.stringify(schedule));
+    const divisionRows = document.querySelectorAll('#settingsDivisionsContainer .division-row');
+    const updatedDivisions = [];
+    divisionRows.forEach(row => {
+        const timeVal = row.querySelector('.division-time').value;
+        if (timeVal) updatedDivisions.push(timeVal);
+    });
 
+    schedule.days[selectedDay] = {
+        blocks: updatedBlocks,
+        divisions: updatedDivisions
+    };
+
+    localStorage.setItem('weekly_recurring_schedule', JSON.stringify(schedule));
     showToast(`✓ Schedule for ${selectedDay} saved!`);
 }
 
@@ -265,12 +382,29 @@ async function addTask(event) {
     const titleInput = document.getElementById('taskTitle');
     const priorityInput = document.getElementById('taskPriority');
     const sliceSelect = document.getElementById('taskSlice');
+    const startTimeInput = document.getElementById('taskStartTime');
 
-    const selectedSlice = sliceSelect ? sliceSelect.value : '';
+    const startTime = startTimeInput ? startTimeInput.value : '';
+    let selectedSlice = sliceSelect ? sliceSelect.value : '';
+
+    if (startTime) {
+        const blockedReason = checkTimeInBlockedWindow(startTime);
+        if (blockedReason) {
+            showToast(`⚠️ Cannot add task: ${startTime} falls in a blocked window (${blockedReason})`);
+            return;
+        }
+        if (!selectedSlice) {
+            selectedSlice = findSliceForTime(startTime);
+        }
+    }
+
+    let metaString = '';
+    if (selectedSlice) metaString += `[slice:${selectedSlice}]`;
+    if (startTime) metaString += `[time:${startTime}]`;
 
     const newTask = {
         title: titleInput.value,
-        description: selectedSlice ? `[slice:${selectedSlice}]` : "",
+        description: metaString,
         priority: parseInt(priorityInput.value)
     };
 
@@ -281,6 +415,7 @@ async function addTask(event) {
             body: JSON.stringify(newTask)
         });
         titleInput.value = '';
+        if (startTimeInput) startTimeInput.value = '';
         fetchTasks();
     } catch (error) {
         console.error('Error adding task:', error);
@@ -322,12 +457,20 @@ function getTaskSlice(task) {
     return match ? match[1] : '';
 }
 
-function cleanDescription(description) {
-    if (!description) return '';
-    return description.replace(/\[slice:(.*?)\]/g, '').trim();
+function getTaskTime(task) {
+    if (!task || !task.description) return '';
+    const match = task.description.match(/\[time:(.*?)\]/);
+    return match ? match[1] : '';
 }
 
-// Smart Markdown insertion: automatically forces a new line if cursor isn't already on one
+function cleanDescription(description) {
+    if (!description) return '';
+    return description
+        .replace(/\[slice:(.*?)\]/g, '')
+        .replace(/\[time:(.*?)\]/g, '')
+        .trim();
+}
+
 function insertMarkdown(syntax) {
     const textarea = document.getElementById('editTaskDescription');
     const start = textarea.selectionStart;
@@ -356,9 +499,10 @@ function editTask(id) {
     document.getElementById('editTaskDescription').value = cleanDescription(task.description);
 
     const sliceSelect = document.getElementById('editTaskSlice');
-    if (sliceSelect) {
-        sliceSelect.value = getTaskSlice(task);
-    }
+    if (sliceSelect) sliceSelect.value = getTaskSlice(task);
+
+    const timeInput = document.getElementById('editTaskStartTime');
+    if (timeInput) timeInput.value = getTaskTime(task);
 
     document.getElementById('editModal').classList.remove('hidden');
 }
@@ -372,12 +516,31 @@ async function submitEdit() {
     const newTitle = document.getElementById('editTaskInput').value;
     const rawDesc = document.getElementById('editTaskDescription').value;
     const sliceSelect = document.getElementById('editTaskSlice');
-    const selectedSlice = sliceSelect ? sliceSelect.value : '';
+    const timeInput = document.getElementById('editTaskStartTime');
+
+    let selectedSlice = sliceSelect ? sliceSelect.value : '';
+    const startTime = timeInput ? timeInput.value : '';
 
     if (currentEditId === null || !newTitle || newTitle.trim() === '') return;
 
+    if (startTime) {
+        const blockedReason = checkTimeInBlockedWindow(startTime);
+        if (blockedReason) {
+            showToast(`⚠️ Cannot update task: ${startTime} falls in a blocked window (${blockedReason})`);
+            return;
+        }
+        if (!selectedSlice) {
+            selectedSlice = findSliceForTime(startTime);
+        }
+    }
+
     const existingTask = allTasks.find(t => t.id === currentEditId) || {};
-    const finalDesc = selectedSlice ? `[slice:${selectedSlice}]\n${rawDesc}` : rawDesc;
+
+    let metaString = '';
+    if (selectedSlice) metaString += `[slice:${selectedSlice}]`;
+    if (startTime) metaString += `[time:${startTime}]`;
+
+    const finalDesc = metaString ? `${metaString}\n${rawDesc}` : rawDesc;
 
     try {
         const response = await fetch(`${API_URL}/${currentEditId}`, {
@@ -399,7 +562,7 @@ async function submitEdit() {
     }
 }
 
-// Subtask Logic & Interactive Board Toggling
+// Subtasks Logic
 const SUBTASK_REGEX = /\[\s*([xX]?)\s*\]/g;
 
 function getSubtaskStats(description) {
@@ -450,7 +613,16 @@ async function toggleRollover(id) {
     }
 }
 
-// Board Rendering
+// Format 24-hour time string into readable 12-hour AM/PM format
+function formatDisplayTime(timeStr) {
+    if (!timeStr) return '';
+    const [h, m] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(h, m, 0);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Board Rendering with Chronological Task Sorting
 function renderTasks(tasks) {
     const container = document.getElementById('scheduleSlicesContainer');
     const completedTaskList = document.getElementById('completedTaskList');
@@ -480,11 +652,15 @@ function renderTasks(tasks) {
             subtaskBadgeHTML = `<span class="subtask-badge ${isAllDone ? 'all-done' : ''}">${subtaskStats.completed}/${subtaskStats.total}</span>`;
         }
 
+        const taskTime = getTaskTime(task);
+        let timeBadgeHTML = '';
+        if (taskTime) {
+            timeBadgeHTML = `<span class="task-time-badge">🕒 ${formatDisplayTime(taskTime)}</span>`;
+        }
+
         let notesHTML = '';
         if (cleanDesc) {
             let cbIdx = 0;
-
-            // Automatically format subtask lines into Markdown list items so each checkbox renders on its own line
             let formattedDesc = cleanDesc.split('\n').map(line => {
                 let trimmed = line.trim();
                 if (trimmed.startsWith('[ ]') || trimmed.startsWith('[x]') || trimmed.startsWith('[X]')) {
@@ -506,6 +682,7 @@ function renderTasks(tasks) {
             <div class="task-item-main">
                 <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} onchange="completeTask(${task.id})">
                 <span class="task-title">${task.title}</span>
+                ${timeBadgeHTML}
                 ${subtaskBadgeHTML}
                 <span class="priority-badge prio-${task.priority}">
                     ${task.priority === 3 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
@@ -521,6 +698,7 @@ function renderTasks(tasks) {
         return li;
     };
 
+    // Group tasks into Slices
     const tasksBySlice = {};
     const unassignedTasks = [];
 
@@ -533,6 +711,18 @@ function renderTasks(tasks) {
             unassignedTasks.push(task);
         }
     });
+
+    // Sort tasks inside each slice by start time
+    const sortTasksByTime = (taskList) => {
+        return taskList.sort((a, b) => {
+            const timeA = getTaskTime(a);
+            const timeB = getTaskTime(b);
+            if (timeA && !timeB) return -1;
+            if (!timeA && timeB) return 1;
+            if (!timeA && !timeB) return 0;
+            return timeA.localeCompare(timeB);
+        });
+    };
 
     if (todaySlices.length > 0) {
         todaySlices.forEach(slice => {
@@ -549,7 +739,7 @@ function renderTasks(tasks) {
             } else {
                 const ul = document.createElement('ul');
                 ul.className = 'task-list';
-                const sliceTasks = tasksBySlice[slice.id] || [];
+                const sliceTasks = sortTasksByTime(tasksBySlice[slice.id] || []);
                 sliceTasks.forEach(task => ul.appendChild(buildTaskHTML(task)));
                 card.appendChild(ul);
             }
@@ -565,14 +755,16 @@ function renderTasks(tasks) {
 
         const ul = document.createElement('ul');
         ul.className = 'task-list';
-        unassignedTasks.forEach(task => ul.appendChild(buildTaskHTML(task)));
+        const sortedUnassigned = sortTasksByTime(unassignedTasks);
+        sortedUnassigned.forEach(task => ul.appendChild(buildTaskHTML(task)));
         card.appendChild(ul);
 
         container.appendChild(card);
     }
 
     if (completedTaskList) {
-        completedTasks.forEach(task => completedTaskList.appendChild(buildTaskHTML(task)));
+        const sortedCompleted = sortTasksByTime(completedTasks);
+        sortedCompleted.forEach(task => completedTaskList.appendChild(buildTaskHTML(task)));
     }
 }
 
