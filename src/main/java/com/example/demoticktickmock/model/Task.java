@@ -32,7 +32,7 @@ public class Task {
         this.title = title;
         this.description = description;
         this.priority = priority;
-        this.timeSlice = "UNSLICED";
+        this.timeSlice = null;
         this.dueDate = LocalDateTime.now();
     }
 

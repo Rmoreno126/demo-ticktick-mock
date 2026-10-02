@@ -78,6 +78,47 @@
     </div>
 </div>
 
+<!-- Day Setup Modal -->
+<div id="scheduleModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <h2>Configure Today's Schedule</h2>
+
+        <div class="form-group">
+            <label>Wake Up Time / Start of Day:</label>
+            <input type="time" id="startTime" value="08:00">
+        </div>
+
+        <div class="form-group">
+            <label>Bedtime / End of Day:</label>
+            <input type="time" id="endTime" value="22:00">
+        </div>
+
+        <hr class="divider">
+
+        <h3>Blocked Time Windows (Class, Work, etc.)</h3>
+        <div id="blockedWindowsContainer">
+            <div class="blocked-row">
+                <input type="text" placeholder="Activity (e.g. Class)" class="block-label" value="Class">
+                <input type="time" class="block-start" value="10:00">
+                <span>to</span>
+                <input type="time" class="block-end" value="13:00">
+            </div>
+            <div class="blocked-row">
+                <input type="text" placeholder="Activity (e.g. Work)" class="block-label" value="Work">
+                <input type="time" class="block-start" value="14:30">
+                <span>to</span>
+                <input type="time" class="block-end" value="18:00">
+            </div>
+        </div>
+
+        <button type="button" id="addBlockBtn" class="btn-secondary">+ Add Blocked Window</button>
+
+        <div class="modal-actions">
+            <button id="generateSlicesBtn" class="btn-primary">Generate Slices</button>
+        </div>
+    </div>
+</div>
+
 <!-- Custom Delete Modal -->
 <div id="deleteModal" class="modal-overlay hidden">
     <div class="modal-content">

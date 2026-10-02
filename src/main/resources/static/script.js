@@ -3,6 +3,8 @@ let currentEditId = null;
 let currentDeleteId = null;
 let allTasks = [];
 
+// --- FETCH & TASK MANAGEMENT ---
+
 async function fetchTasks() {
     try {
         const response = await fetch(API_URL);
@@ -87,7 +89,6 @@ async function submitEdit() {
     const newDesc = document.getElementById('editTaskDescription').value;
     if (currentEditId === null || !newTitle || newTitle.trim() === '') return;
 
-    // Find original task to keep all existing properties intact
     const existingTask = allTasks.find(t => t.id === currentEditId) || {};
 
     try {
@@ -112,10 +113,10 @@ async function submitEdit() {
     }
 }
 
-// Unified search rule matching: [ ], [], [x], [X], [  ]
+// --- SUBTASK & MARKDOWN PREVIEW ---
+
 const SUBTASK_REGEX = /\[\s*([xX]?)\s*\]/g;
 
-// Helper to calculate subtask completion ratio
 function getSubtaskStats(description) {
     if (!description) return null;
     const matches = [...description.matchAll(SUBTASK_REGEX)];
@@ -192,23 +193,26 @@ function renderTasks(tasks) {
     const completedTaskList = document.getElementById('completedTaskList');
     const completedSection = document.getElementById('completedSection');
 
+    if (!taskList) return;
+
     taskList.innerHTML = '';
-    completedTaskList.innerHTML = '';
+    if (completedTaskList) completedTaskList.innerHTML = '';
 
     const activeTasks = tasks.filter(task => !task.completed);
     const completedTasks = tasks.filter(task => task.completed);
 
-    if (completedTasks.length === 0) {
-        completedSection.classList.add('hidden');
-    } else {
-        completedSection.classList.remove('hidden');
+    if (completedSection) {
+        if (completedTasks.length === 0) {
+            completedSection.classList.add('hidden');
+        } else {
+            completedSection.classList.remove('hidden');
+        }
     }
 
     const buildTaskHTML = (task) => {
         const li = document.createElement('li');
         li.className = `task-item ${task.completed ? 'completed' : ''} ${task.rollover ? 'is-rollover' : ''}`;
 
-        // Subtask badge calculation
         const subtaskStats = getSubtaskStats(task.description);
         let subtaskBadgeHTML = '';
         if (subtaskStats) {
@@ -241,8 +245,123 @@ function renderTasks(tasks) {
     };
 
     activeTasks.forEach(task => taskList.appendChild(buildTaskHTML(task)));
-    completedTasks.forEach(task => completedTaskList.appendChild(buildTaskHTML(task)));
+    if (completedTaskList) {
+        completedTasks.forEach(task => completedTaskList.appendChild(buildTaskHTML(task)));
+    }
 }
+
+// --- DYNAMIC TIME-SLICE & SCHEDULE GENERATOR ---
+
+function generateSchedule() {
+    const wakeVal = document.getElementById('startTime').value;
+    const sleepVal = document.getElementById('endTime').value;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const baseDate = `${todayStr}T`;
+
+    let wakeTime = new Date(`${baseDate}${wakeVal}:00`);
+    let sleepTime = new Date(`${baseDate}${sleepVal}:00`);
+
+    if (sleepTime <= wakeTime) {
+        sleepTime.setDate(sleepTime.getDate() + 1);
+    }
+
+    const blockedRows = document.querySelectorAll('.blocked-row');
+    const blockedWindows = [];
+
+    blockedRows.forEach(row => {
+        const labelInput = row.querySelector('.block-label');
+        const startInput = row.querySelector('.block-start');
+        const endInput = row.querySelector('.block-end');
+
+        const label = (labelInput && labelInput.value) ? labelInput.value : 'Blocked';
+        const startVal = startInput ? startInput.value : null;
+        const endVal = endInput ? endInput.value : null;
+
+        if (startVal && endVal) {
+            let bStart = new Date(`${baseDate}${startVal}:00`);
+            let bEnd = new Date(`${baseDate}${endVal}:00`);
+            if (bStart < wakeTime) bStart.setDate(bStart.getDate() + 1);
+            if (bEnd <= bStart) bEnd.setDate(bEnd.getDate() + 1);
+
+            blockedWindows.push({ label, start: bStart, end: bEnd, isBlocked: true });
+        }
+    });
+
+    blockedWindows.sort((a, b) => a.start - b.start);
+
+    let freeIntervals = [];
+    let currentTime = new Date(wakeTime);
+
+    blockedWindows.forEach(block => {
+        if (currentTime < block.start) {
+            freeIntervals.push({ start: new Date(currentTime), end: new Date(block.start), isBlocked: false });
+        }
+        freeIntervals.push(block);
+        currentTime = new Date(Math.max(currentTime, block.end));
+    });
+
+    if (currentTime < sleepTime) {
+        freeIntervals.push({ start: new Date(currentTime), end: new Date(sleepTime), isBlocked: false });
+    }
+
+    renderTimeSections(freeIntervals);
+}
+
+function formatTime(date) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderTimeSections(intervals) {
+    const container = document.getElementById('tasksContainer') || document.getElementById('taskList');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    let sliceIndex = 1;
+
+    intervals.forEach(interval => {
+        const section = document.createElement('div');
+        section.className = interval.isBlocked ? 'time-section blocked' : 'time-section active';
+
+        const header = document.createElement('h3');
+        if (interval.isBlocked) {
+            header.innerText = `🚫 ${interval.label} (${formatTime(interval.start)} - ${formatTime(interval.end)})`;
+            section.appendChild(header);
+            section.innerHTML += `<p class="blocked-text">Tasks cannot be assigned during this period.</p>`;
+        } else {
+            const sliceId = `SLICE_${sliceIndex}`;
+            header.innerText = `Slice ${sliceIndex}: ${formatTime(interval.start)} - ${formatTime(interval.end)}`;
+            section.appendChild(header);
+            section.innerHTML += `<div class="slice-task-list" data-slice="${sliceId}"></div>`;
+            sliceIndex++;
+        }
+
+        container.appendChild(section);
+    });
+
+    const modal = document.getElementById('scheduleModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+function addBlockedRow() {
+    const container = document.getElementById('blockedWindowsContainer');
+    if (!container) return;
+
+    const row = document.createElement('div');
+    row.className = 'blocked-row';
+    row.innerHTML = `
+        <input type="text" placeholder="Activity (e.g. Class)" class="block-label">
+        <input type="time" class="block-start">
+        <span>to</span>
+        <input type="time" class="block-end">
+    `;
+    container.appendChild(row);
+}
+
+// --- UTILITY & INIT ---
 
 function insertMarkdown(syntax) {
     const textarea = document.getElementById('editTaskDescription');
@@ -260,6 +379,19 @@ function insertMarkdown(syntax) {
     textarea.focus();
     updatePreview();
 }
+
+// Event Listeners for Schedule Modal Buttons
+document.addEventListener('DOMContentLoaded', () => {
+    const generateBtn = document.getElementById('generateSlicesBtn');
+    if (generateBtn) {
+        generateBtn.addEventListener('click', generateSchedule);
+    }
+
+    const addBlockBtn = document.getElementById('addBlockBtn');
+    if (addBlockBtn) {
+        addBlockBtn.addEventListener('click', addBlockedRow);
+    }
+});
 
 // Register Service Worker for PWA support
 if ('serviceWorker' in navigator) {
