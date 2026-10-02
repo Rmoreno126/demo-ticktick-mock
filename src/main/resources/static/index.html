@@ -104,7 +104,10 @@
                 <div id="settingsBlockedContainer"></div>
 
                 <div class="settings-actions">
-                    <button type="button" class="btn-secondary" onclick="addSettingsBlockedRow()">+ Add Blocked Window</button>
+                    <div class="action-buttons-left">
+                        <button type="button" class="btn-secondary" onclick="addSettingsBlockedRow()">+ Add Blocked Window</button>
+                        <button type="button" class="btn-clear" onclick="clearSettingsBlockedRows()">🗑️ Clear All Blocks</button>
+                    </div>
                     <button type="button" class="btn-primary" onclick="saveWeeklySchedule()">💾 Save Schedule</button>
                 </div>
             </div>
@@ -146,7 +149,7 @@
                     <button type="button" onclick="insertMarkdown('**bold**')">Bold</button>
                 </div>
 
-                <textarea id="editTaskDescription" placeholder="Add subtasks or notes here using Markdown...&#10;- [ ] Subtask 1&#10;- [ ] Subtask 2"></textarea>
+                <textarea id="editTaskDescription" placeholder="Add subtasks or notes here using Markdown...&#10;[ ] Subtask 1&#10;[ ] Subtask 2"></textarea>
             </div>
         </div>
 

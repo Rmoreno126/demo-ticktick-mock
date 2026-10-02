@@ -249,7 +249,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     color: #86efac;
 }
 
-/* Inline Prettified Markdown Rendering on Board */
+/* Board Markdown & Subtask List Layout */
 .task-notes-rendered {
     background: #0f172a;
     border: 1px solid #334155;
@@ -263,27 +263,31 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 .task-notes-rendered p { margin-bottom: 0.4rem; }
 .task-notes-rendered p:last-child { margin-bottom: 0; }
-.task-notes-rendered ul, .task-notes-rendered ol { padding-left: 1.2rem; margin-bottom: 0.4rem; }
+
+.task-notes-rendered ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.task-notes-rendered li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    margin-bottom: 0.4rem;
+    line-height: 1.4;
+}
+
+.task-notes-rendered li:last-child {
+    margin-bottom: 0;
+}
+
 .task-notes-rendered input[type="checkbox"] {
     accent-color: var(--primary-color);
     cursor: pointer;
-    margin-right: 0.4rem;
-    transform: scale(1.1);
-}
-
-/* Completed Section */
-.completed-card {
-    background: #0f172a;
-    border: 1px solid var(--card-border);
-    border-radius: 10px;
-    padding: 1rem;
-    margin-top: 1rem;
-}
-
-.completed-header {
-    font-size: 0.95rem;
-    color: var(--text-muted);
-    margin-bottom: 0.75rem;
+    margin-top: 0.15rem;
+    transform: scale(1.15);
+    flex-shrink: 0;
 }
 
 /* Settings View Styling */
@@ -349,8 +353,30 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .settings-actions {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     margin-top: 1rem;
     gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.action-buttons-left {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-clear {
+    background: #475569;
+    color: #f8fafc;
+    border: none;
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.btn-clear:hover {
+    background: #64748b;
 }
 
 /* Toast */
@@ -453,9 +479,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     background: #334155;
     border: none;
     color: var(--text-main);
-    padding: 0.3rem 0.6rem;
+    padding: 0.38rem 0.7rem;
     border-radius: 4px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     cursor: pointer;
     font-weight: 600;
 }

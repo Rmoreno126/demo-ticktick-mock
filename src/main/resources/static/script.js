@@ -1,3 +1,7 @@
+if (window.marked && window.marked.setOptions) {
+    window.marked.setOptions({ breaks: true });
+}
+
 const API_URL = '/api/tasks';
 let currentEditId = null;
 let currentDeleteId = null;
@@ -213,6 +217,11 @@ function addSettingsBlockedRow(label = '', start = '10:00', end = '12:00') {
     container.appendChild(row);
 }
 
+function clearSettingsBlockedRows() {
+    const container = document.getElementById('settingsBlockedContainer');
+    if (container) container.innerHTML = '';
+}
+
 function saveWeeklySchedule() {
     const wakeTime = document.getElementById('globalWakeTime').value;
     const sleepTime = document.getElementById('globalSleepTime').value;
@@ -318,15 +327,24 @@ function cleanDescription(description) {
     return description.replace(/\[slice:(.*?)\]/g, '').trim();
 }
 
+// Smart Markdown insertion: automatically forces a new line if cursor isn't already on one
 function insertMarkdown(syntax) {
     const textarea = document.getElementById('editTaskDescription');
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const text = textarea.value;
 
-    textarea.value = text.substring(0, start) + syntax + text.substring(end);
+    const linePrefixes = ['[ ] ', '- ', '1. ', '### '];
+    let prefix = '';
+
+    if (linePrefixes.includes(syntax) && start > 0 && text[start - 1] !== '\n') {
+        prefix = '\n';
+    }
+
+    const insertion = prefix + syntax;
+    textarea.value = text.substring(0, start) + insertion + text.substring(end);
     textarea.focus();
-    textarea.selectionStart = textarea.selectionEnd = start + syntax.length;
+    textarea.selectionStart = textarea.selectionEnd = start + insertion.length;
 }
 
 function editTask(id) {
@@ -465,11 +483,22 @@ function renderTasks(tasks) {
         let notesHTML = '';
         if (cleanDesc) {
             let cbIdx = 0;
-            let parsedMarkdown = cleanDesc.replace(SUBTASK_REGEX, (match, group1) => {
+
+            // Automatically format subtask lines into Markdown list items so each checkbox renders on its own line
+            let formattedDesc = cleanDesc.split('\n').map(line => {
+                let trimmed = line.trim();
+                if (trimmed.startsWith('[ ]') || trimmed.startsWith('[x]') || trimmed.startsWith('[X]')) {
+                    return `- ${trimmed}`;
+                }
+                return line;
+            }).join('\n');
+
+            let parsedMarkdown = formattedDesc.replace(SUBTASK_REGEX, (match, group1) => {
                 const isChecked = group1.toLowerCase() === 'x';
                 const idx = cbIdx++;
                 return `<input type="checkbox" ${isChecked ? 'checked' : ''} onclick="toggleTaskSubtask(${task.id}, ${idx})">`;
             });
+
             notesHTML = `<div class="task-notes-rendered">${marked.parse(parsedMarkdown)}</div>`;
         }
 
