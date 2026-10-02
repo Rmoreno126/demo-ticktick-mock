@@ -19,7 +19,10 @@
 <body>
 
 <div class="app-container">
-    <h2>My Tasks</h2>
+    <div class="header-row" style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>My Tasks</h2>
+        <button type="button" class="btn-secondary" onclick="openScheduleModal()">⚙️ Schedule Day</button>
+    </div>
 
     <form class="task-form" onsubmit="addTask(event)">
         <input type="text" id="taskTitle" placeholder="What needs to be done?" required>
@@ -31,9 +34,11 @@
         <button type="submit">Add Task</button>
     </form>
 
-    <ul class="task-list" id="taskList">
-        <!-- Tasks will be injected here -->
-    </ul>
+    <div id="tasksContainer">
+        <ul class="task-list" id="taskList">
+            <!-- Tasks / Time slices will be injected here -->
+        </ul>
+    </div>
 
     <!-- Completed Section -->
     <div id="completedSection" class="hidden">
@@ -43,9 +48,6 @@
         </ul>
     </div>
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="script.js"></script>
 
 <!-- Custom Edit Modal (Sticky Note Style) -->
 <div id="editModal" class="modal-overlay hidden">
@@ -78,10 +80,13 @@
     </div>
 </div>
 
-<!-- Day Setup Modal -->
+<!-- Day Setup / Schedule Modal -->
 <div id="scheduleModal" class="modal-overlay hidden">
     <div class="modal-card">
-        <h2>Configure Today's Schedule</h2>
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>Configure Today's Schedule</h2>
+            <button type="button" onclick="closeScheduleModal()" class="icon-btn">✖</button>
+        </div>
 
         <div class="form-group">
             <label>Wake Up Time / Start of Day:</label>
@@ -114,7 +119,7 @@
         <button type="button" id="addBlockBtn" class="btn-secondary">+ Add Blocked Window</button>
 
         <div class="modal-actions">
-            <button id="generateSlicesBtn" class="btn-primary">Generate Slices</button>
+            <button type="button" id="generateSlicesBtn" class="btn-primary">Generate Slices</button>
         </div>
     </div>
 </div>
@@ -135,5 +140,7 @@
         </div>
     </div>
 </div>
+
+<script src="script.js"></script>
 </body>
 </html>

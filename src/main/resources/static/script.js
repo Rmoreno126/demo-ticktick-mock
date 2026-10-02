@@ -361,6 +361,16 @@ function addBlockedRow() {
     container.appendChild(row);
 }
 
+function openScheduleModal() {
+    const modal = document.getElementById('scheduleModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeScheduleModal() {
+    const modal = document.getElementById('scheduleModal');
+    if (modal) modal.classList.add('hidden');
+}
+
 // --- UTILITY & INIT ---
 
 function insertMarkdown(syntax) {
